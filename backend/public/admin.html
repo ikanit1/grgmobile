@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Doorphone — панель управления</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Unbounded:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f0f12;
+      --card: #18181c;
+      --border: #2a2a30;
+      --text: #e4e4e7;
+      --muted: #71717a;
+      --accent: #a78bfa;
+      --accent-dim: #7c3aed;
+      --success: #22c55e;
+      --error: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 14px;
+    }
+    h1, h2 { font-family: 'Unbounded', sans-serif; font-weight: 600; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+    header h1 { font-size: 1.25rem; margin: 0; color: var(--accent); }
+    .nav { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    a:hover { text-decoration: underline; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .card h2 { font-size: 1rem; margin: 0 0 1rem 0; color: var(--muted); }
+    form { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: flex-end; }
+    input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 13px;
+    }
+    input::placeholder { color: var(--muted); }
+    button {
+      background: var(--accent-dim);
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-family: inherit;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button:hover { background: var(--accent); }
+    button.secondary { background: var(--border); color: var(--text); }
+    .msg { margin-top: 0.75rem; padding: 0.5rem; border-radius: 6px; font-size: 12px; }
+    .msg.err { background: rgba(239,68,68,0.15); color: var(--error); }
+    .msg.ok { background: rgba(34,197,94,0.15); color: var(--success); }
+    .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .tabs button { background: var(--border); }
+    .tabs button.active { background: var(--accent-dim); }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; }
+    .badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; background: var(--border); font-size: 11px; }
+    #authSection { margin-bottom: 1.5rem; }
+    #dataSection { display: none; }
+    #dataSection.ready { display: block; }
+    .meta { color: var(--muted); font-size: 12px; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Doorphone Backend</h1>
+      <nav class="nav">
+        <a href="/docs" target="_blank">Swagger API</a>
+        <span id="userInfo" class="meta"></span>
+        <button type="button" id="logoutBtn" class="secondary" style="display:none;">Выйти</button>
+      </nav>
+    </header>
+
+    <section id="authSection" class="card">
+      <h2>Вход</h2>
+      <form id="loginForm">
+        <div>
+          <label style="display:block; margin-bottom:0.25rem; color: var(--muted);">Логин (email или телефон)</label>
+          <input type="text" id="login" name="login" placeholder="admin@example.com" required>
+        </div>
+        <div>
+          <label style="display:block; margin-bottom:0.25rem; color: var(--muted);">Пароль</label>
+          <input type="password" id="password" name="password" placeholder="••••••" required>
+        </div>
+        <button type="submit">Войти</button>
+      </form>
+      <div id="loginMsg" class="msg" style="display:none;"></div>
+    </section>
+
+    <section class="card">
+      <h2>Настройки backend</h2>
+      <div id="health">Загрузка…</div>
+      <div class="meta">GET /api/health</div>
+    </section>
+
+    <section id="dataSection" class="card">
+      <h2>Данные</h2>
+      <p id="roleHint" class="meta" style="margin-bottom:0.75rem;"></p>
+      <div class="tabs" id="tabBar"></div>
+      <div id="dataContent">Выберите вкладку</div>
+      <div id="createSection" class="card" style="margin-top:1rem; display:none;">
+        <h2 id="createSectionTitle">Создать</h2>
+        <div id="createFormContainer"></div>
+        <div id="createMsg" class="msg" style="display:none;"></div>
+      </div>
+    </section>
+    <section id="residentSection" class="card" style="display:none;">
+      <h2>Жители квартиры</h2>
+      <p class="meta">Квартира: <span id="residentApartmentName">—</span></p>
+      <div id="residentsList">Загрузка…</div>
+      <form id="addResidentForm" style="margin-top:1rem;">
+        <input type="text" id="resUserId" placeholder="ID пользователя (или оставьте пустым)" style="width:200px;">
+        <input type="text" id="resEmail" placeholder="Email">
+        <input type="text" id="resPhone" placeholder="Телефон">
+        <input type="text" id="resRole" placeholder="роль: owner/resident/guest" value="resident" style="width:120px;">
+        <button type="submit">Добавить жителя</button>
+      </form>
+      <div id="addResidentMsg" class="msg" style="display:none;"></div>
+    </section>
+  </div>
+
+  <script>
+    const API = '/api';
+    let token = localStorage.getItem('doorphone_token');
+    let currentUser = null; // { id, role, organizationId, complexId }
+
+    function parseJwt(t) {
+      try {
+        const base64 = t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        return JSON.parse(decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));
+      } catch (e) { return null; }
+    }
+
+    function setUserFromToken() {
+      if (!token) { currentUser = null; return; }
+      const p = parseJwt(token);
+      if (p) currentUser = { id: p.sub, role: p.role, organizationId: p.organization_id, complexId: p.complex_id };
+    }
+
+    function showMsg(el, text, isErr) {
+      if (!el) return;
+      el.textContent = text;
+      el.className = 'msg ' + (isErr ? 'err' : 'ok');
+      el.style.display = 'block';
+    }
+
+    async function fetchHealth() {
+      const r = await fetch(API + '/health');
+      const d = await r.json();
+      document.getElementById('health').innerHTML =
+        '<strong>Статус:</strong> ' + d.status + ' &nbsp;|&nbsp; <strong>БД:</strong> ' + d.dbType + ' &nbsp;|&nbsp; <strong>Порт:</strong> ' + d.port;
+    }
+
+    async function auth() {
+      const login = document.getElementById('login').value.trim();
+      const password = document.getElementById('password').value;
+      const msgEl = document.getElementById('loginMsg');
+      try {
+        const r = await fetch(API + '/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ login, password }),
+        });
+        const d = await r.json();
+        if (r.ok) {
+          token = d.token || d.access_token || null;
+          if (!token || !String(token).trim()) {
+            showMsg(msgEl, 'Ошибка: сервер не вернул токен.', true);
+            return;
+          }
+          localStorage.setItem('doorphone_token', token);
+          currentUser = d.user ? { id: d.user.id, role: d.user.role, organizationId: d.user.organizationId, complexId: d.user.complexId } : null;
+          if (!currentUser) setUserFromToken();
+          showMsg(msgEl, 'Вход выполнен.', false);
+          onTokenReady();
+        } else {
+          showMsg(msgEl, d.message || 'Ошибка входа', true);
+        }
+      } catch (e) {
+        showMsg(msgEl, 'Сеть: ' + e.message, true);
+      }
+    }
+
+    function buildTabsByRole() {
+      const role = currentUser && currentUser.role;
+      const hint = document.getElementById('roleHint');
+      const tabBar = document.getElementById('tabBar');
+      tabBar.innerHTML = '';
+      if (role === 'RESIDENT') {
+        hint.textContent = 'Роль: Житель. Используйте мобильное приложение для доступа к своим домам и устройствам.';
+        document.getElementById('dataContent').textContent = 'Для управления домофонами используйте мобильное приложение.';
+        return;
+      }
+      hint.textContent = 'Роль: ' + (role || '—');
+      const tabs = [];
+      if (role === 'SUPER_ADMIN') {
+        tabs.push({ tab: 'dashboard', label: 'Дашборд' });
+        tabs.push({ tab: 'organizations', label: 'Организации' });
+        tabs.push({ tab: 'complexes', label: 'ЖК' });
+        tabs.push({ tab: 'buildings', label: 'Здания' });
+        tabs.push({ tab: 'apartments', label: 'Квартиры' });
+        tabs.push({ tab: 'residents', label: 'Жители (привязка)' });
+        tabs.push({ tab: 'users', label: 'Пользователи' });
+        tabs.push({ tab: 'devices', label: 'Устройства' });
+        tabs.push({ tab: 'applications', label: 'Заявки жителей' });
+      } else if (role === 'ORG_ADMIN' || role === 'COMPLEX_MANAGER') {
+        tabs.push({ tab: 'dashboard', label: 'Дашборд' });
+        tabs.push({ tab: 'complexes', label: 'ЖК' });
+        tabs.push({ tab: 'buildings', label: 'Здания' });
+        tabs.push({ tab: 'apartments', label: 'Квартиры' });
+        tabs.push({ tab: 'devices', label: 'Устройства' });
+        tabs.push({ tab: 'residents', label: 'Жители (привязка)' });
+        tabs.push({ tab: 'applications', label: 'Заявки жителей' });
+      }
+      tabs.forEach(({ tab, label }) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.dataset.tab = tab;
+        btn.textContent = label;
+        tabBar.appendChild(btn);
+      });
+      tabBar.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', function() {
+          tabBar.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+          try { sessionStorage.setItem('admin_tab', this.dataset.tab); } catch (e) {}
+          fetchData(this.dataset.tab);
+        });
+      });
+      if (tabs.length) {
+        let activeTab = tabs[0].tab;
+        try {
+          const saved = sessionStorage.getItem('admin_tab');
+          if (saved && tabs.some(t => t.tab === saved)) activeTab = saved;
+        } catch (e) {}
+        const activeBtn = Array.from(tabBar.querySelectorAll('button')).find(b => b.dataset.tab === activeTab) || tabBar.querySelector('button');
+        if (activeBtn) { activeBtn.classList.add('active'); fetchData(activeBtn.dataset.tab); }
+      }
+    }
+
+    function onTokenReady() {
+      setUserFromToken();
+      document.getElementById('dataSection').classList.add('ready');
+      document.getElementById('logoutBtn').style.display = 'inline-block';
+      document.getElementById('userInfo').textContent = currentUser ? ('Роль: ' + currentUser.role) : 'Токен сохранён';
+      buildTabsByRole();
+    }
+
+    function logout() {
+      token = null;
+      currentUser = null;
+      localStorage.removeItem('doorphone_token');
+      document.getElementById('dataSection').classList.remove('ready');
+      document.getElementById('logoutBtn').style.display = 'none';
+      document.getElementById('userInfo').textContent = '';
+      document.getElementById('dataContent').textContent = 'Выберите вкладку';
+      document.getElementById('tabBar').innerHTML = '';
+      document.getElementById('residentSection').style.display = 'none';
+      document.getElementById('loginMsg').style.display = 'none';
+    }
+
+    function handle401() {
+      logout();
+      const msgEl = document.getElementById('loginMsg');
+      showMsg(msgEl, 'Сессия истекла. Войдите снова.', true);
+    }
+
+    function on401Response() {
+      if (token && String(token).trim()) handle401();
+      else { document.getElementById('dataContent').textContent = 'Сначала войдите.'; }
+    }
+
+    const headers = () => ({ Authorization: 'Bearer ' + (token || localStorage.getItem('doorphone_token') || '') });
+
+    async function fetchData(tab) {
+      token = token || localStorage.getItem('doorphone_token');
+      const content = document.getElementById('dataContent');
+      const createSection = document.getElementById('createSection');
+      createSection.style.display = 'none';
+      document.getElementById('residentSection').style.display = 'none';
+      content.textContent = 'Загрузка…';
+      if (!token || !String(token).trim()) { content.textContent = 'Сначала войдите.'; return; }
+      try {
+        if (tab === 'dashboard') {
+          const r = await fetch(API + '/admin/dashboard', { headers: headers() });
+          if (r.status === 401) { on401Response(); return; }
+          if (!r.ok) throw new Error(r.statusText);
+          const s = await r.json();
+          let html = '<div class="card"><h2>Сводка</h2><ul style="list-style:none; padding:0;">';
+          if (s.organizations != null) html += '<li><strong>Организации:</strong> ' + s.organizations + '</li>';
+          html += '<li><strong>ЖК:</strong> ' + (s.complexes ?? 0) + '</li>';
+          html += '<li><strong>Здания:</strong> ' + (s.buildings ?? 0) + '</li>';
+          html += '<li><strong>Устройства:</strong> ' + (s.devices ?? 0) + ' (онлайн: ' + (s.devicesOnline ?? 0) + ', офлайн: ' + (s.devicesOffline ?? 0) + ')</li>';
+          html += '<li><strong>Жители:</strong> ' + (s.residents ?? 0) + '</li>';
+          html += '<li><strong>Заявки ожидают одобрения:</strong> ' + (s.applicationsPending ?? 0) + '</li>';
+          html += '</ul></div>';
+          content.innerHTML = html;
+          return;
+        }
+        if (tab === 'apartments') {
+          const r = await fetch(API + '/buildings', { headers: headers() });
+          if (r.status === 401) { on401Response(); return; }
+          if (!r.ok) throw new Error(r.statusText);
+          const buildings = await r.json();
+          const buildingOpts = Array.isArray(buildings) ? buildings.map(function(b) { return '<option value="' + b.id + '">' + (b.name || b.id) + '</option>'; }).join('') : '';
+          let html = '<div class="card" style="margin-bottom:1rem;"><h2>Создать квартиру</h2><form id="formCreateAptTop"><label>Здание <select id="aptBuildingIdTop">' + buildingOpts + '</select></label> <input id="aptNumberTop" placeholder="Номер квартиры" required> <input id="aptFloorTop" type="number" placeholder="Этаж"> <input id="aptExtensionTop" placeholder="Расширение (SIP/номер для вызова монитора)"> <button type="submit">Создать</button></form><div id="createAptMsgTop" class="msg" style="display:none;"></div><p class="meta" style="margin-top:0.75rem;">Для Akuvox: номера квартир должны совпадать с номерами в вебхуке (apartmentNumber). Если указано расширение, панель будет звонить на этот номер; такой же номер должен быть настроен на внутреннем мониторе.</p></div>';
+          html += '<p>Квартиры по зданиям. Выберите здание или импортируйте квартиры (CSV/Excel):</p><ul>';
+          for (const b of buildings) {
+            html += '<li><a href="#" data-load-apartments="' + b.id + '">' + (b.name || 'Здание ' + b.id) + '</a> ' +
+              '<button type="button" class="import-apartments-btn" data-building-id="' + b.id + '">Импорт квартир</button> ' +
+              '<button type="button" class="bulk-apartments-btn" data-building-id="' + b.id + '" data-building-name="' + (b.name || b.id).toString().replace(/"/g, '&quot;') + '">Создать диапазон</button></li>';
+          }
+          html += '</ul><div id="apartmentsList"></div>';
+          content.innerHTML = html;
+          (function() {
+            const form = document.getElementById('formCreateAptTop');
+            const msgEl = document.getElementById('createAptMsgTop');
+            function showMsg(el, text, isErr) { el.textContent = text; el.style.display = 'block'; el.className = 'msg' + (isErr ? ' err' : ' ok'); }
+            form.addEventListener('submit', async function(e) {
+              e.preventDefault();
+              const body = { buildingId: parseInt(document.getElementById('aptBuildingIdTop').value, 10), number: document.getElementById('aptNumberTop').value.trim() };
+              const fl = document.getElementById('aptFloorTop').value; if (fl) body.floor = parseInt(fl, 10);
+              const ext = document.getElementById('aptExtensionTop').value.trim(); if (ext) body.extension = ext;
+              try {
+                const req = await fetch(API + '/apartments', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                if (req.status === 401) { on401Response(); return; }
+                const d = await req.json().catch(function() { return {}; });
+                if (req.ok) { showMsg(msgEl, 'Квартира создана.', false); fetchData('apartments'); form.reset(); } else { showMsg(msgEl, d.message || req.statusText, true); }
+              } catch (err) { showMsg(msgEl, err.message, true); }
+            });
+          })();
+          content.querySelectorAll('[data-load-apartments]').forEach(a => {
+            a.addEventListener('click', async function(e) { e.preventDefault(); await loadApartmentsByBuilding(Number(this.dataset.loadApartments)); });
+          });
+          content.querySelectorAll('.import-apartments-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+              const bid = this.dataset.buildingId;
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = '.csv,.xlsx,.xls';
+              input.onchange = async function() {
+                if (!input.files || !input.files[0]) return;
+                const fd = new FormData();
+                fd.append('file', input.files[0]);
+                try {
+                  const r = await fetch(API + '/buildings/' + bid + '/apartments/import', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: fd });
+                  const d = r.ok ? await r.json() : await r.json().catch(() => ({}));
+                  if (r.ok) { alert('Импорт выполнен: ' + (d.imported != null ? d.imported + ' записей' : JSON.stringify(d))); fetchData('apartments'); }
+                  else alert(d.message || r.statusText);
+                } catch (e) { alert(e.message); }
+              };
+              input.click();
+            });
+          });
+          content.querySelectorAll('.bulk-apartments-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+              const bid = this.dataset.buildingId;
+              const name = this.dataset.buildingName || bid;
+              const fromStr = prompt('Номер первой квартиры (от):', '1');
+              if (fromStr == null) return;
+              const toStr = prompt('Номер последней квартиры (до):', '50');
+              if (toStr == null) return;
+              const from = parseInt(fromStr, 10);
+              const to = parseInt(toStr, 10);
+              if (isNaN(from) || isNaN(to) || from < 1 || to > 500 || from > to) {
+                alert('Укажите числа от 1 до 500, «от» не больше «до».');
+                return;
+              }
+              try {
+                const r = await fetch(API + '/buildings/' + bid + '/apartments/bulk', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ from: from, to: to }) });
+                if (r.status === 401) { on401Response(); return; }
+                const d = r.ok ? await r.json() : await r.json().catch(function() { return {}; });
+                if (r.ok) { alert('Создано квартир: ' + (d.created ?? 0) + (d.skipped ? ', пропущено (уже есть): ' + d.skipped : '')); fetchData('apartments'); } else { alert(d.message || r.statusText); }
+              } catch (e) { alert(e.message); }
+            });
+          });
+          addCreateForm('apartments');
+          return;
+        }
+        if (tab === 'applications') {
+          let rBuildings = await fetch(API + '/buildings', { headers: headers() });
+          if (rBuildings.status === 401) {
+            token = localStorage.getItem('doorphone_token');
+            rBuildings = await fetch(API + '/buildings', { headers: headers() });
+          }
+          if (rBuildings.status === 401) { on401Response(); return; }
+          const buildings = rBuildings.ok ? await rBuildings.json() : [];
+          const statusFilter = document.getElementById('applicationsStatusFilter');
+          const buildingFilter = document.getElementById('applicationsBuildingFilter');
+          const st = (statusFilter && statusFilter.value) ? statusFilter.value : 'PENDING';
+          const bid = (buildingFilter && buildingFilter.value) ? buildingFilter.value : '';
+          const buildingOpts = '<option value="">— все здания —</option>' + buildings.map(b => '<option value="' + b.id + '"' + (String(b.id) === String(bid) ? ' selected' : '') + '>' + (b.name || b.id) + '</option>').join('');
+          let url = API + '/apartments/applications?';
+          if (st) url += 'status=' + encodeURIComponent(st);
+          if (bid) url += '&buildingId=' + encodeURIComponent(bid);
+          token = localStorage.getItem('doorphone_token');
+          let r = await fetch(url, { headers: headers() });
+          if (r.status === 401) {
+            token = localStorage.getItem('doorphone_token');
+            r = await fetch(url, { headers: headers() });
+          }
+          if (r.status === 401) { on401Response(); return; }
+          if (!r.ok) throw new Error(r.statusText);
+          const list = await r.json();
+          let html = '<p>Заявки жителей на привязку к квартире. Фильтры:</p>';
+          html += '<p><label>Статус <select id="applicationsStatusFilter">' +
+            '<option value="PENDING"' + (st === 'PENDING' ? ' selected' : '') + '>Ожидают</option>' +
+            '<option value="APPROVED"' + (st === 'APPROVED' ? ' selected' : '') + '>Одобрены</option>' +
+            '<option value="REJECTED"' + (st === 'REJECTED' ? ' selected' : '') + '>Отклонены</option>' +
+            '</select></label> <label>Здание <select id="applicationsBuildingFilter">' + buildingOpts + '</select></label> ' +
+            '<button type="button" id="applicationsRefreshBtn">Обновить</button></p>';
+          if (list.length === 0) {
+            html += '<p>Нет заявок.</p>';
+          } else {
+            html += '<table><tr><th>ID</th><th>Квартира</th><th>Здание</th><th>Пользователь</th><th>Статус</th><th>Дата</th><th>Действия</th></tr>';
+            list.forEach(app => {
+              const apt = app.apartment || {};
+              const b = (apt.building || {});
+              const u = app.user || {};
+              const userLabel = (u.email || u.phone || u.name || app.userId || '—');
+              const reqDate = app.requestedAt ? new Date(app.requestedAt).toLocaleString() : '—';
+              let actions = '';
+              if (app.status === 'PENDING') {
+                actions = '<button type="button" class="app-approve" data-id="' + app.id + '">Одобрить</button> ' +
+                  '<button type="button" class="app-reject" data-id="' + app.id + '">Отклонить</button>';
+              } else {
+                actions = '—';
+              }
+              html += '<tr><td>' + app.id + '</td><td>' + (apt.number || apt.id) + '</td><td>' + (b.name || b.id) + '</td><td>' + userLabel + '</td><td>' + app.status + '</td><td>' + reqDate + '</td><td>' + actions + '</td></tr>';
+            });
+            html += '</table>';
+          }
+          content.innerHTML = html;
+          content.querySelector('#applicationsRefreshBtn') && content.querySelector('#applicationsRefreshBtn').addEventListener('click', function() { fetchData('applications'); });
+          content.querySelectorAll('.app-approve').forEach(btn => {
+            btn.addEventListener('click', async function() {
+              const id = this.dataset.id;
+              try {
+                const r = await fetch(API + '/apartments/applications/' + id, { method: 'PATCH', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'APPROVED' }) });
+                if (r.status === 401) { on401Response(); return; }
+                if (r.ok) fetchData('applications'); else { const d = await r.json(); alert(d.message || r.statusText); }
+              } catch (e) { alert(e.message); }
+            });
+          });
+          content.querySelectorAll('.app-reject').forEach(btn => {
+            btn.addEventListener('click', async function() {
+              const id = this.dataset.id;
+              const reason = prompt('Причина отклонения (необязательно):');
+              if (reason === null) return;
+              try {
+                const r = await fetch(API + '/apartments/applications/' + id, { method: 'PATCH', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'REJECTED', rejectReason: reason || undefined }) });
+                if (r.status === 401) { on401Response(); return; }
+                if (r.ok) fetchData('applications'); else { const d = await r.json(); alert(d.message || r.statusText); }
+              } catch (e) { alert(e.message); }
+            });
+          });
+          return;
+        }
+        if (tab === 'residents') {
+          const r = await fetch(API + '/buildings', { headers: headers() });
+          if (r.status === 401) { on401Response(); return; }
+          if (!r.ok) throw new Error(r.statusText);
+          const buildings = await r.json();
+          let html = '<p>Выберите здание, затем квартиру — чтобы добавить/удалить жителя. Либо импортируйте жителей по зданию:</p>';
+          for (const b of buildings) {
+            html += '<p><strong>' + (b.name || b.id) + '</strong> ';
+            const rr = await fetch(API + '/apartments/by-building/' + b.id, { headers: headers() });
+            const apts = rr.ok ? await rr.json() : [];
+            apts.forEach(a => { html += '<a href="#" data-apt-id="' + a.id + '" data-apt-name="' + (a.number || a.id) + '">' + (a.number || a.id) + '</a> '; });
+            html += ' <button type="button" class="import-residents-btn" data-building-id="' + b.id + '" data-building-name="' + (b.name || b.id) + '">Импорт жителей</button></p>';
+          }
+          content.innerHTML = html;
+          content.querySelectorAll('[data-apt-id]').forEach(a => {
+            a.addEventListener('click', function(e) { e.preventDefault(); showResidents(Number(this.dataset.aptId), this.dataset.aptName); });
+          });
+          content.querySelectorAll('.import-residents-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+              const bid = this.dataset.buildingId;
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = '.csv,.xlsx,.xls';
+              input.onchange = async function() {
+                if (!input.files || !input.files[0]) return;
+                const fd = new FormData();
+                fd.append('file', input.files[0]);
+                try {
+                  const r = await fetch(API + '/buildings/' + bid + '/residents/import', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: fd });
+                  const d = r.ok ? await r.json() : await r.json().catch(() => ({}));
+                  if (r.ok) alert('Импорт выполнен: ' + (d.imported != null ? d.imported + ' записей' : JSON.stringify(d)));
+                  else alert(d.message || r.statusText);
+                  if (r.ok) fetchData('residents');
+                } catch (e) { alert(e.message); }
+              };
+              input.click();
+            });
+          });
+          return;
+        }
+        if (tab === 'devices') {
+          let r = await fetch(API + '/buildings', { headers: headers() });
+          if (r.status === 401) {
+            token = localStorage.getItem('doorphone_token');
+            r = await fetch(API + '/buildings', { headers: headers() });
+          }
+          if (r.status === 401) { on401Response(); return; }
+          if (!r.ok) throw new Error(r.statusText);
+          const buildings = await r.json();
+          let html = '<p>Устройства по зданиям. Добавить устройство: выберите здание и заполните форму ниже.</p>';
+          html += '<div class="card" style="margin-bottom:1rem;"><h3 style="margin-top:0;">Akuvox (в т.ч. X912): настройка от бэкенда</h3><p style="margin:0 0 0.5rem 0;">Выберите панели и нажмите «Синхронизировать конфиг и квартиры». На панель отправятся: <strong>URL вебхуков</strong> (события вызова, открытие двери), <strong>whitelist</strong> и <strong>список квартир</strong> здания. Номера квартир в системе должны совпадать с номерами на панели (вебхук apartmentNumber).</p><p class="meta" style="margin:0 0 0.5rem 0;">R20/R25: квартиры в Контакты (contact API). <strong>X912, S532, S562:</strong> квартиры попадают в «Каталог » Пользователь» (user API). SIP при необходимости настраивается отдельно на панели.</p>';
+          html += '<button type="button" id="syncConfigBtn">Синхронизировать конфиг и квартиры</button> <span id="syncConfigStatus" class="meta" style="margin-left:0.5rem;"></span></div>';
+          html += '<div class="card" style="margin-bottom:1rem;"><p class="meta" style="margin:0;"><strong>Как настроить панель X912 по бэкенду:</strong> 1) На вкладке «Квартиры» создайте квартиры по зданию (вручную, импортом или «Создать диапазон»). 2) Добавьте устройство типа Akuvox с хостом панели и учётными данными. 3) Здесь выберите это устройство и нажмите «Синхронизировать конфиг и квартиры». При изменении списка квартир синхронизацию можно запустить снова (или она запустится автоматически после импорта/диапазона).</p></div>';
+          for (const b of buildings) {
+            token = localStorage.getItem('doorphone_token');
+            let rr = await fetch(API + '/buildings/' + b.id + '/devices', { headers: headers() });
+            if (rr.status === 401) {
+              token = localStorage.getItem('doorphone_token');
+              rr = await fetch(API + '/buildings/' + b.id + '/devices', { headers: headers() });
+            }
+            if (rr.status === 401) { on401Response(); return; }
+            const devs = rr.ok ? await rr.json() : [];
+            html += '<p><strong>' + (b.name || b.id) + '</strong> (id=' + b.id + '): ' + devs.length + ' шт.</p>';
+            if (devs.length) {
+              html += '<table><tr><th>Синхр.</th><th>ID</th><th>Имя</th><th>Тип</th><th>Роль</th><th>Хост</th><th>Действия</th></tr>';
+              devs.forEach(d => {
+                const isAkuvox = (d.type || '') === 'AKUVOX';
+                const cb = isAkuvox ? '<input type="checkbox" class="sync-config-cb" data-device-id="' + d.id + '" title="Выбрать для синхронизации конфига">' : '';
+                html += '<tr><td>' + cb + '</td><td>' + d.id + '</td><td>' + (d.name || '') + '</td><td>' + (d.type || '') + '</td><td>' + (d.role || '') + '</td><td>' + (d.host || '') + '</td><td>' +
+                  '<button type="button" class="dev-edit" data-device-id="' + d.id + '">Изменить</button> ' +
+                  '<button type="button" class="dev-delete" data-device-id="' + d.id + '" data-device-name="' + (d.name || '#' + d.id).replace(/"/g, '&quot;') + '">Удалить</button></td></tr>';
+              });
+              html += '</table>';
+            }
+          }
+          content.innerHTML = html;
+          const syncConfigBtn = document.getElementById('syncConfigBtn');
+          const syncConfigStatus = document.getElementById('syncConfigStatus');
+          if (syncConfigBtn && syncConfigStatus) {
+            syncConfigBtn.addEventListener('click', async function() {
+              const checked = content.querySelectorAll('.sync-config-cb:checked');
+              const ids = Array.from(checked).map(el => parseInt(el.getAttribute('data-device-id'), 10)).filter(n => !isNaN(n));
+              if (ids.length === 0) { syncConfigStatus.textContent = 'Выберите хотя бы одно устройство Akuvox.'; return; }
+              syncConfigStatus.textContent = 'Запуск…';
+              syncConfigBtn.disabled = true;
+              try {
+                const r = await fetch(API + '/devices/sync-config', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ deviceIds: ids }) });
+                if (r.status === 401) { on401Response(); syncConfigBtn.disabled = false; return; }
+                if (!r.ok) { const d = await r.json().catch(() => ({})); syncConfigStatus.textContent = 'Ошибка: ' + (d.message || r.statusText); syncConfigBtn.disabled = false; return; }
+                const result = await r.json();
+                const failed = (result || []).filter(x => !x.success);
+                if (failed.length === 0) syncConfigStatus.textContent = 'Готово. Устройств: ' + (result.length || 0);
+                else syncConfigStatus.textContent = 'Частично: ' + failed.length + ' с ошибкой. ' + failed.map(x => '#' + x.deviceId + ': ' + (x.error || '')).join('; ');
+                fetchData('devices');
+              } catch (e) { syncConfigStatus.textContent = 'Ошибка: ' + e.message; }
+              syncConfigBtn.disabled = false;
+            });
+          }
+          content.querySelectorAll('.dev-edit').forEach(btn => {
+            btn.addEventListener('click', function() { openEditDeviceForm(Number(this.dataset.deviceId), buildings); });
+          });
+          content.querySelectorAll('.dev-delete').forEach(btn => {
+            btn.addEventListener('click', function() {
+              const id = Number(this.dataset.deviceId);
+              const name = this.dataset.deviceName || ('#' + id);
+              if (!confirm('Удалить устройство «' + name + '»?')) return;
+              fetch(API + '/devices/' + id, { method: 'DELETE', headers: headers() })
+                .then(r => { if (r.status === 401) { on401Response(); return; } if (!r.ok) throw new Error(r.statusText); return fetchData('devices'); })
+                .catch(e => { content.textContent = 'Ошибка: ' + e.message; });
+            });
+          });
+          showCreateDeviceForm(buildings);
+          return;
+        }
+        let url = '';
+        if (tab === 'organizations') url = API + '/organizations';
+        else if (tab === 'complexes') url = API + '/complexes';
+        else if (tab === 'buildings') url = API + '/buildings';
+        else if (tab === 'users') url = API + '/users';
+        if (!url) { content.textContent = 'Неизвестная вкладка'; return; }
+        const r = await fetch(url, { headers: headers() });
+        if (r.status === 401) { on401Response(); return; }
+        if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+        const data = await r.json();
+        if (!Array.isArray(data)) { content.textContent = JSON.stringify(data, null, 2); return; }
+        if (data.length === 0) { content.textContent = 'Нет записей.'; addCreateForm(tab); return; }
+        const keys = Object.keys(data[0]).filter(k => !k.match(/^(building|complex|organization)$/i));
+        const isStaff = currentUser && ['SUPER_ADMIN', 'ORG_ADMIN', 'COMPLEX_MANAGER'].includes(currentUser.role);
+        if (tab === 'users' && isStaff) {
+          const keyRow = keys.map(k => '<th>' + k + '</th>').join('') + '<th>Действия</th>';
+          const rows = data.map(row => {
+            const cells = keys.map(k => '<td>' + (row[k] != null ? String(row[k]) : '') + '</td>').join('');
+            const blocked = row.isBlocked || (row.blockedUntil && new Date(row.blockedUntil) > new Date());
+            const blockBtn = blocked
+              ? '<button type="button" class="user-unblock-btn" data-user-id="' + row.id + '">Разблокировать</button>'
+              : '<button type="button" class="user-block-btn" data-user-id="' + row.id + '">Заблокировать</button>';
+            const name = (row.email || row.phone || row.name || row.id || '').toString().replace(/"/g, '&quot;');
+            const delBtn = '<button type="button" class="user-delete-btn" data-user-id="' + row.id + '" data-name="' + name + '">Удалить</button>';
+            return '<tr>' + cells + '<td>' + blockBtn + ' ' + delBtn + '</td></tr>';
+          });
+          let html = '';
+          if (currentUser && currentUser.role === 'SUPER_ADMIN') {
+            const orgs = await (async () => { try { const r = await fetch(API + '/organizations', { headers: headers() }); if (r.ok) return await r.json(); return []; } catch (e) { return []; } })();
+            const complexes = await (async () => { try { const r = await fetch(API + '/complexes', { headers: headers() }); if (r.ok) return await r.json(); return []; } catch (e) { return []; } })();
+            html += '<div class="card" id="createOrgAdminCard" style="margin-bottom:1rem;">' +
+              '<h2>Создать администратора УК</h2>' +
+              '<form id="createOrgAdminForm">' +
+              '<label>Email <input type="email" id="orgAdminEmail" placeholder="admin@uk.ru"></label> ' +
+              '<label>Телефон <input type="text" id="orgAdminPhone" placeholder="+79001234567"></label> ' +
+              '<label>Имя <input type="text" id="orgAdminName" placeholder="Иван Иванов"></label> ' +
+              '<label>Пароль <input type="password" id="orgAdminPassword" placeholder="мин. 6 символов" required></label><br>' +
+              '<label>Организация <select id="orgAdminOrgId" required>' + orgs.map(o => '<option value="' + o.id + '">' + (o.name || o.id) + '</option>').join('') + '</select></label> ' +
+              '<label>Роль <select id="orgAdminRole">' +
+              '<option value="ORG_ADMIN">Админ УК</option><option value="COMPLEX_MANAGER">Менеджер ЖК</option>' +
+              '</select></label> ' +
+              '<span id="orgAdminComplexWrap" style="display:none;">' +
+              '<label>ЖК <select id="orgAdminComplexId"><option value="">— выберите —</option>' + complexes.map(c => '<option value="' + c.id + '" data-org="' + (c.organizationId || '') + '">' + (c.name || c.id) + '</option>').join('') + '</select></label></span> ' +
+              '<button type="submit">Создать</button>' +
+              '</form><div id="createOrgAdminMsg" class="msg" style="display:none;"></div></div>';
+          }
+          html += '<table><tr>' + keyRow + '</tr>' + rows.join('') + '</table>';
+          content.innerHTML = html;
+          content.querySelectorAll('.user-block-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+              const id = this.dataset.userId;
+              try {
+                const r = await fetch(API + '/admin/users/' + encodeURIComponent(id) + '/block', { method: 'PATCH', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ isBlocked: true }) });
+                if (r.status === 401) { on401Response(); return; }
+                if (r.ok) fetchData('users'); else { const d = await r.json(); alert(d.message || r.statusText); }
+              } catch (e) { alert(e.message); }
+            });
+          });
+          content.querySelectorAll('.user-unblock-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+              const id = this.dataset.userId;
+              try {
+                const r = await fetch(API + '/admin/users/' + encodeURIComponent(id) + '/block', { method: 'PATCH', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ isBlocked: false }) });
+                if (r.status === 401) { on401Response(); return; }
+                if (r.ok) fetchData('users'); else { const d = await r.json(); alert(d.message || r.statusText); }
+              } catch (e) { alert(e.message); }
+            });
+          });
+          content.querySelectorAll('.user-delete-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+              const id = this.dataset.userId;
+              const name = this.dataset.name || id;
+              if (!confirm('Удалить пользователя «' + name + '»? Привязки к квартирам и заявки будут удалены.')) return;
+              try {
+                const r = await fetch(API + '/admin/users/' + encodeURIComponent(id), { method: 'DELETE', headers: headers() });
+                if (r.status === 401) { on401Response(); return; }
+                if (!r.ok) { const d = await r.json().catch(function() { return {}; }); alert(d.message || r.statusText); return; }
+                fetchData('users');
+              } catch (e) { alert(e.message); }
+            });
+          });
+          const createForm = document.getElementById('createOrgAdminForm');
+          if (createForm) {
+            const roleSel = document.getElementById('orgAdminRole');
+            const orgSel = document.getElementById('orgAdminOrgId');
+            const complexWrap = document.getElementById('orgAdminComplexWrap');
+            const complexSel = document.getElementById('orgAdminComplexId');
+            function filterComplexes() {
+              if (!complexSel || !orgSel) return;
+              const orgId = orgSel.value;
+              Array.from(complexSel.querySelectorAll('option')).forEach(opt => {
+                if (opt.value === '') { opt.style.display = ''; return; }
+                opt.style.display = opt.dataset.org === orgId ? '' : 'none';
+                if (opt.dataset.org === orgId && !opt.selected) complexSel.value = opt.value;
+              });
+            }
+            roleSel.addEventListener('change', function() {
+              complexWrap.style.display = this.value === 'COMPLEX_MANAGER' ? 'inline' : 'none';
+              filterComplexes();
+            });
+            orgSel.addEventListener('change', filterComplexes);
+            if (roleSel.value === 'COMPLEX_MANAGER') complexWrap.style.display = 'inline';
+            filterComplexes();
+            createForm.addEventListener('submit', async function(e) {
+              e.preventDefault();
+              const msgEl = document.getElementById('createOrgAdminMsg');
+              const email = document.getElementById('orgAdminEmail').value.trim();
+              const phone = document.getElementById('orgAdminPhone').value.trim();
+              if (!email && !phone) { showMsg(msgEl, 'Укажите email или телефон', true); return; }
+              const body = {
+                password: document.getElementById('orgAdminPassword').value,
+                organizationId: document.getElementById('orgAdminOrgId').value,
+                role: document.getElementById('orgAdminRole').value
+              };
+              if (email) body.email = email;
+              if (phone) body.phone = phone;
+              const name = document.getElementById('orgAdminName').value.trim();
+              if (name) body.name = name;
+              if (body.role === 'COMPLEX_MANAGER') {
+                const cid = document.getElementById('orgAdminComplexId').value;
+                if (!cid) { showMsg(msgEl, 'Выберите ЖК для менеджера', true); return; }
+                body.complexId = cid;
+              }
+              try {
+                const r = await fetch(API + '/admin/users/org-admin', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                if (r.status === 401) { on401Response(); return; }
+                const d = r.ok ? await r.json() : await r.json().catch(() => ({}));
+                if (r.ok) { showMsg(msgEl, 'Пользователь создан: ' + (d.email || d.phone || d.id), false); fetchData('users'); createForm.reset(); } else showMsg(msgEl, d.message || r.statusText, true);
+              } catch (err) { showMsg(msgEl, err.message, true); }
+            });
+          }
+        } else if ((tab === 'organizations' && currentUser && currentUser.role === 'SUPER_ADMIN') ||
+            (tab === 'complexes' && isStaff) ||
+            (tab === 'buildings' && isStaff)) {
+          const keyRow = keys.map(k => '<th>' + k + '</th>').join('') + '<th>Действия</th>';
+          const rows = data.map(row => {
+            const cells = keys.map(k => '<td>' + (row[k] != null ? String(row[k]) : '') + '</td>').join('');
+            const name = (row.name || row.id || '').toString().replace(/"/g, '&quot;');
+            const delBtn = '<button type="button" class="entity-delete-btn" data-tab="' + tab + '" data-id="' + (row.id ?? '').toString().replace(/"/g, '&quot;') + '" data-name="' + name + '">Удалить</button>';
+            return '<tr>' + cells + '<td>' + delBtn + '</td></tr>';
+          });
+          content.innerHTML = '<table><tr>' + keyRow + '</tr>' + rows.join('') + '</table>';
+          content.querySelectorAll('.entity-delete-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+              const entityTab = this.dataset.tab;
+              const id = this.dataset.id;
+              const name = this.dataset.name || id;
+              if (!confirm('Удалить «' + name + '»? Вложенные данные (ЖК, здания, устройства и т.д.) могут быть затронуты.')) return;
+              const path = entityTab === 'organizations' ? 'organizations' : entityTab === 'complexes' ? 'complexes' : 'buildings';
+              try {
+                const r = await fetch(API + '/' + path + '/' + encodeURIComponent(id), { method: 'DELETE', headers: headers() });
+                if (r.status === 401) { on401Response(); return; }
+                if (!r.ok) { const d = await r.json().catch(function() { return {}; }); alert(d.message || r.statusText); return; }
+                fetchData(entityTab);
+              } catch (e) { alert(e.message); }
+            });
+          });
+        } else {
+          content.innerHTML = '<table><tr>' + keys.map(k => '<th>' + k + '</th>').join('') + '</tr>' +
+            data.map(row => '<tr>' + keys.map(k => '<td>' + (row[k] != null ? String(row[k]) : '') + '</td>').join('') + '</tr>').join('') + '</table>';
+        }
+        addCreateForm(tab);
+      } catch (e) {
+        content.textContent = 'Ошибка: ' + e.message;
+      }
+    }
+
+    async function loadApartmentsByBuilding(buildingId) {
+      const list = document.getElementById('apartmentsList');
+      if (!list) return;
+      list.innerHTML = 'Загрузка…';
+      const r = await fetch(API + '/apartments/by-building/' + buildingId, { headers: headers() });
+      if (r.status === 401) { on401Response(); return; }
+      if (!r.ok) { list.textContent = 'Ошибка'; return; }
+      const data = await r.json();
+      if (data.length === 0) { list.innerHTML = '<p>Нет квартир.</p>'; return; }
+      const keys = Object.keys(data[0]).filter(k => k !== 'building');
+      const keyRow = keys.map(k => '<th>' + k + '</th>').join('') + '<th>Действия</th>';
+      const rows = data.map(row => {
+        const cells = keys.map(k => '<td>' + (row[k] != null ? String(row[k]) : '') + '</td>').join('');
+        const name = (row.number || row.id || '').toString().replace(/"/g, '&quot;');
+        const ext = (row.extension != null ? String(row.extension) : '').replace(/"/g, '&quot;');
+        const editBtn = '<button type="button" class="apt-edit-btn" data-id="' + row.id + '" data-name="' + name + '" data-extension="' + ext + '">Изменить</button>';
+        const delBtn = '<button type="button" class="apt-delete-btn" data-id="' + row.id + '" data-name="' + name + '">Удалить</button>';
+        return '<tr>' + cells + '<td>' + editBtn + ' ' + delBtn + '</td></tr>';
+      });
+      list.innerHTML = '<table><tr>' + keyRow + '</tr>' + rows.join('') + '</table>';
+      list.querySelectorAll('.apt-edit-btn').forEach(btn => {
+        btn.addEventListener('click', async function() {
+          const id = this.dataset.id;
+          const name = this.dataset.name || id;
+          const currentExt = this.dataset.extension || '';
+          const newExt = prompt('Расширение (SIP/номер для вызова монитора). Оставьте пустым, чтобы убрать.', currentExt);
+          if (newExt === null) return;
+          try {
+            const req = await fetch(API + '/apartments/' + id, { method: 'PATCH', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ extension: newExt.trim() || undefined }) });
+            if (req.status === 401) { on401Response(); return; }
+            if (!req.ok) { const d = await req.json().catch(function() { return {}; }); alert(d.message || req.statusText); return; }
+            await loadApartmentsByBuilding(buildingId);
+          } catch (e) { alert(e.message); }
+        });
+      });
+      list.querySelectorAll('.apt-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async function() {
+          const id = this.dataset.id;
+          const name = this.dataset.name || id;
+          if (!confirm('Удалить квартиру «' + name + '»?')) return;
+          try {
+            const req = await fetch(API + '/apartments/' + id, { method: 'DELETE', headers: headers() });
+            if (req.status === 401) { on401Response(); return; }
+            if (!req.ok) { const d = await req.json().catch(function() { return {}; }); alert(d.message || req.statusText); return; }
+            await loadApartmentsByBuilding(buildingId);
+          } catch (e) { alert(e.message); }
+        });
+      });
+    }
+
+    let currentResidentApartmentId = null;
+    function showResidents(apartmentId, apartmentName) {
+      currentResidentApartmentId = apartmentId;
+      document.getElementById('residentApartmentName').textContent = apartmentName || apartmentId;
+      document.getElementById('residentSection').style.display = 'block';
+      document.getElementById('addResidentForm').dataset.apartmentId = String(apartmentId);
+      loadResidentsList(apartmentId);
+    }
+
+    async function loadResidentsList(apartmentId) {
+      const el = document.getElementById('residentsList');
+      el.textContent = 'Загрузка…';
+      const r = await fetch(API + '/apartments/' + apartmentId + '/residents', { headers: headers() });
+      if (r.status === 401) { on401Response(); return; }
+      if (!r.ok) { el.textContent = 'Ошибка'; return; }
+      const list = await r.json();
+      if (list.length === 0) { el.innerHTML = '<p>Нет привязанных жителей.</p>'; return; }
+      const userLabel = (ua) => (ua.user ? (ua.user.email || ua.user.phone || ua.userId) : ua.userId);
+      el.innerHTML = '<table><tr><th>User ID</th><th>Роль</th><th>Действие</th></tr>' +
+        list.map(ua => '<tr><td>' + userLabel(ua) + '</td><td>' + (ua.role || '') + '</td><td><button type="button" data-remove="' + ua.userId + '" data-label="' + String(userLabel(ua)).replace(/"/g, '&quot;') + '">Удалить</button></td></tr>').join('') + '</table>';
+      el.querySelectorAll('[data-remove]').forEach(btn => {
+        btn.addEventListener('click', async function() {
+          const label = this.dataset.label || this.dataset.remove;
+          if (!confirm('Удалить привязку для «' + label + '»?')) return;
+          await removeResident(apartmentId, this.dataset.remove);
+          loadResidentsList(apartmentId);
+        });
+      });
+    }
+
+    async function removeResident(apartmentId, userId) {
+      const r = await fetch(API + '/apartments/' + apartmentId + '/residents/' + encodeURIComponent(userId), { method: 'DELETE', headers: headers() });
+      if (r.status === 401) { on401Response(); return; }
+      if (!r.ok) throw new Error(r.statusText);
+    }
+
+    document.getElementById('addResidentForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const aptId = this.dataset.apartmentId;
+      if (!aptId) return;
+      const msgEl = document.getElementById('addResidentMsg');
+      const body = { role: document.getElementById('resRole').value.trim() || 'resident' };
+      if (document.getElementById('resUserId').value.trim()) body.userId = document.getElementById('resUserId').value.trim();
+      else if (document.getElementById('resEmail').value.trim()) body.email = document.getElementById('resEmail').value.trim();
+      else if (document.getElementById('resPhone').value.trim()) body.phone = document.getElementById('resPhone').value.trim();
+      else { showMsg(msgEl, 'Укажите userId, email или phone', true); return; }
+      try {
+        const r = await fetch(API + '/apartments/' + aptId + '/residents', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (r.status === 401) { on401Response(); return; }
+        const d = r.ok ? await r.json() : await r.text();
+        if (r.ok) { showMsg(msgEl, 'Житель добавлен.', false); loadResidentsList(Number(aptId)); } else showMsg(msgEl, typeof d === 'string' ? d : (d.message || 'Ошибка'), true);
+      } catch (err) { showMsg(msgEl, err.message, true); }
+    });
+
+    async function openEditDeviceForm(deviceId, buildings) {
+      const r = await fetch(API + '/devices/' + deviceId, { headers: headers() });
+      if (r.status === 401) { on401Response(); return; }
+      if (!r.ok) throw new Error(r.statusText);
+      const device = await r.json();
+      showCreateDeviceForm(buildings, device);
+    }
+
+    function showCreateDeviceForm(buildings, editDevice) {
+      const sec = document.getElementById('createSection');
+      const title = document.getElementById('createSectionTitle');
+      const container = document.getElementById('createFormContainer');
+      const isEdit = !!editDevice;
+      title.textContent = isEdit ? 'Редактировать устройство' : 'Добавить устройство к зданию';
+      container.innerHTML =
+        '<input type="hidden" id="devEditId" value="' + (editDevice ? editDevice.id : '') + '">' +
+        '<form id="formAddDevice" style="flex-wrap:wrap;">' +
+        '<label>Здание <select id="devBuildingId">' + buildings.map(b => '<option value="' + b.id + '"' + (editDevice && b.id === editDevice.buildingId ? ' selected' : '') + '>' + (b.name || b.id) + '</option>').join('') + '</select></label> ' +
+        '<input id="devName" placeholder="Имя" required value="' + (editDevice ? (editDevice.name || '').replace(/"/g, '&quot;') : '') + '"> ' +
+        '<input id="devHost" placeholder="Host (IP)" required value="' + (editDevice ? (editDevice.host || '').replace(/"/g, '&quot;') : '') + '"> ' +
+        '<select id="devType"><option value="AKUVOX"' + (editDevice && editDevice.type === 'AKUVOX' ? ' selected' : '') + '>Akuvox</option><option value="UNIVIEW_IPC"' + (editDevice && editDevice.type === 'UNIVIEW_IPC' ? ' selected' : '') + '>Uniview IPC</option><option value="UNIVIEW_NVR"' + (editDevice && editDevice.type === 'UNIVIEW_NVR' ? ' selected' : '') + '>Uniview NVR</option><option value="OTHER"' + (editDevice && editDevice.type === 'OTHER' ? ' selected' : '') + '>Other</option></select> ' +
+        '<select id="devRole"><option value="DOORPHONE"' + (editDevice && editDevice.role === 'DOORPHONE' ? ' selected' : '') + '>Домофон</option><option value="CAMERA"' + (editDevice && editDevice.role === 'CAMERA' ? ' selected' : '') + '>Камера</option><option value="NVR"' + (editDevice && editDevice.role === 'NVR' ? ' selected' : '') + '>NVR</option></select> ' +
+        '<input id="devUser" placeholder="Логин" value="' + (editDevice && editDevice.username ? String(editDevice.username).replace(/"/g, '&quot;') : '') + '"> ' +
+        '<input id="devPass" type="password" placeholder="Пароль" value="' + (editDevice && editDevice.password ? String(editDevice.password) : '') + '"> ' +
+        '<input id="devHttpPort" type="number" placeholder="HTTP порт (80)" style="width:110px;" value="' + (editDevice && editDevice.httpPort != null ? editDevice.httpPort : 80) + '"> ' +
+        '<input id="devRtspPort" type="number" placeholder="RTSP порт (554)" style="width:110px;" value="' + (editDevice && editDevice.rtspPort != null ? editDevice.rtspPort : 554) + '"> ' +
+        '<input id="devChannel" type="number" placeholder="Канал" style="width:80px;" value="' + (editDevice && editDevice.defaultChannel != null ? editDevice.defaultChannel : '') + '"> ' +
+        '<input id="devStream" placeholder="Поток (main)" style="width:100px;" value="' + (editDevice && editDevice.defaultStream ? String(editDevice.defaultStream).replace(/"/g, '&quot;') : '') + '"> ' +
+        '<button type="submit">' + (isEdit ? 'Сохранить' : 'Добавить') + '</button> ' +
+        (isEdit ? '<button type="button" id="devCancelEdit" class="secondary">Отмена</button> ' : '') +
+        '<button type="button" id="devTestBtn" class="secondary">Проверить связь</button> ' +
+        '<button type="button" id="devOnvifBtn" class="secondary">ONVIF поиск</button>' +
+        '</form>' +
+        '<div id="devTestResult" class="msg" style="display:none;"></div>' +
+        '<div id="devOnvifResult" style="margin-top:0.5rem;"></div>';
+      sec.style.display = 'block';
+      if (isEdit) {
+        container.querySelector('#devCancelEdit').addEventListener('click', function() {
+          document.getElementById('devEditId').value = '';
+          showCreateDeviceForm(buildings);
+        });
+      }
+
+      container.querySelector('#devTestBtn').addEventListener('click', async function() {
+        const el = document.getElementById('devTestResult');
+        const host = document.getElementById('devHost').value.trim();
+        const type = document.getElementById('devType').value;
+        if (!host) { showMsg(el, 'Укажите Host/IP', true); return; }
+        el.textContent = 'Проверка...'; el.className = 'msg'; el.style.display = 'block';
+        try {
+          const body = { host, type };
+          const editId = document.getElementById('devEditId') && document.getElementById('devEditId').value.trim();
+          if (editId) body.deviceId = parseInt(editId, 10);
+          const u = document.getElementById('devUser').value.trim();
+          const p = document.getElementById('devPass').value;
+          const hp = parseInt(document.getElementById('devHttpPort').value, 10);
+          if (u) body.username = u;
+          if (p) body.password = p;
+          if (hp) body.httpPort = hp;
+          const r = await fetch(API + '/devices/test-connection', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          if (r.status === 401) { on401Response(); return; }
+          const d = await r.json();
+          if (d.reachable) {
+            const fmt = (v) => {
+              if (v == null) return String(v);
+              if (typeof v === 'object') {
+                const s = JSON.stringify(v);
+                return s.length > 80 ? s.slice(0, 77) + '...' : s;
+              }
+              return String(v);
+            };
+            const info = d.info ? ' | ' + Object.entries(d.info).slice(0, 5).map(([k,v]) => k + ': ' + fmt(v)).join(', ') : '';
+            showMsg(el, 'Устройство доступно' + info, false);
+          } else {
+            showMsg(el, 'Не удалось: ' + (d.error || 'unknown'), true);
+          }
+        } catch (e) { showMsg(el, 'Ошибка: ' + e.message, true); }
+      });
+
+      container.querySelector('#devOnvifBtn').addEventListener('click', async function() {
+        const bid = document.getElementById('devBuildingId').value;
+        const el = document.getElementById('devOnvifResult');
+        el.innerHTML = '<span style="color:var(--muted);">Поиск ONVIF...</span>';
+        try {
+          const r = await fetch(API + '/buildings/' + bid + '/discover-onvif', { method: 'POST', headers: headers() });
+          if (r.status === 401) { on401Response(); return; }
+          const list = r.ok ? await r.json() : [];
+          if (!list.length) { el.innerHTML = '<span style="color:var(--muted);">Устройств не найдено.</span>'; return; }
+          el.innerHTML = '<strong style="color:var(--muted);">Найдено ' + list.length + ':</strong> ' +
+            list.map(d => '<a href="#" class="onvif-pick" data-host="' + d.host + '" data-name="' + (d.name || d.host) + '">' + (d.name || d.host) + ' (' + d.host + ')</a>').join(', ');
+          el.querySelectorAll('.onvif-pick').forEach(a => {
+            a.addEventListener('click', function(e) {
+              e.preventDefault();
+              document.getElementById('devHost').value = this.dataset.host;
+              if (!document.getElementById('devName').value.trim()) document.getElementById('devName').value = this.dataset.name;
+            });
+          });
+        } catch (e) { el.innerHTML = '<span style="color:var(--error);">Ошибка: ' + e.message + '</span>'; }
+      });
+
+      container.querySelector('#formAddDevice').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const editId = document.getElementById('devEditId') && document.getElementById('devEditId').value.trim();
+        const hpVal = document.getElementById('devHttpPort').value.trim();
+        const rpVal = document.getElementById('devRtspPort').value.trim();
+        const chVal = document.getElementById('devChannel').value.trim();
+        const hp = hpVal ? parseInt(hpVal, 10) : undefined;
+        const rp = rpVal ? parseInt(rpVal, 10) : undefined;
+        const ch = chVal ? parseInt(chVal, 10) : undefined;
+        if (hpVal && (isNaN(hp) || hp < 1 || hp > 65535)) { showMsg(document.getElementById('createMsg'), 'HTTP порт: число от 1 до 65535', true); return; }
+        if (rpVal && (isNaN(rp) || rp < 1 || rp > 65535)) { showMsg(document.getElementById('createMsg'), 'RTSP порт: число от 1 до 65535', true); return; }
+        const body = {
+          name: document.getElementById('devName').value.trim(),
+          host: document.getElementById('devHost').value.trim(),
+          type: document.getElementById('devType').value,
+          role: document.getElementById('devRole').value,
+          username: document.getElementById('devUser').value.trim() || undefined,
+          password: document.getElementById('devPass').value || undefined,
+        };
+        if (hp) body.httpPort = hp;
+        if (rp) body.rtspPort = rp;
+        if (ch) body.defaultChannel = ch;
+        const st = document.getElementById('devStream').value.trim();
+        if (st) body.defaultStream = st;
+        const msgEl = document.getElementById('createMsg');
+        try {
+          let r;
+          if (editId) {
+            r = await fetch(API + '/devices/' + editId, { method: 'PATCH', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            if (r.status === 401) { on401Response(); return; }
+            if (r.ok) { showMsg(msgEl, 'Устройство сохранено.', false); document.getElementById('devEditId').value = ''; showCreateDeviceForm(buildings); fetchData('devices'); } else { const d = await r.json(); showMsg(msgEl, d.message || r.statusText, true); }
+          } else {
+            const bid = document.getElementById('devBuildingId').value;
+            r = await fetch(API + '/buildings/' + bid + '/devices', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            if (r.status === 401) { on401Response(); return; }
+            if (r.ok) { showMsg(msgEl, 'Устройство добавлено.', false); fetchData('devices'); } else { const d = await r.json(); showMsg(msgEl, d.message || r.statusText, true); }
+          }
+        } catch (err) { showMsg(msgEl, 'Ошибка: ' + err.message, true); }
+      });
+    }
+
+    function addCreateForm(tab) {
+      const sec = document.getElementById('createSection');
+      const title = document.getElementById('createSectionTitle');
+      const container = document.getElementById('createFormContainer');
+      const msgEl = document.getElementById('createMsg');
+      msgEl.style.display = 'none';
+      if (tab === 'organizations' && currentUser && currentUser.role === 'SUPER_ADMIN') {
+        sec.style.display = 'block';
+        title.textContent = 'Создать организацию';
+        container.innerHTML = '<form id="formCreateOrg"><input id="orgName" placeholder="Название" required> <input id="orgPlan" placeholder="Тариф (basic)" value="basic"> <input id="orgMax" type="number" placeholder="max_complexes" value="10" min="1"> <button type="submit">Создать</button></form>';
+        container.querySelector('#formCreateOrg').addEventListener('submit', async function(e) {
+          e.preventDefault();
+          const r = await fetch(API + '/organizations', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ name: document.getElementById('orgName').value.trim(), subscriptionPlan: document.getElementById('orgPlan').value.trim() || 'basic', maxComplexes: parseInt(document.getElementById('orgMax').value, 10) || 10 }) });
+          if (r.ok) { showMsg(msgEl, 'Организация создана.', false); fetchData('organizations'); } else { const d = await r.json(); showMsg(msgEl, d.message || r.statusText, true); }
+        });
+        return;
+      }
+      if (tab === 'complexes' && currentUser && (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'ORG_ADMIN' || currentUser.role === 'COMPLEX_MANAGER')) {
+        sec.style.display = 'block';
+        title.textContent = 'Создать ЖК';
+        (async () => {
+          const orgs = await (await fetch(API + '/organizations', { headers: headers() })).json();
+          const orgOptions = Array.isArray(orgs) ? orgs.map(o => '<option value="' + o.id + '">' + (o.name || o.id) + '</option>').join('') : '';
+          container.innerHTML = '<form id="formCreateComplex"><label>Организация <select id="complexOrgId">' + orgOptions + '</select></label> <input id="complexName" placeholder="Название ЖК" required> <input id="complexAddr" placeholder="Адрес"> <button type="submit">Создать</button></form>';
+          container.querySelector('#formCreateComplex').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const r = await fetch(API + '/complexes', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ organizationId: document.getElementById('complexOrgId').value, name: document.getElementById('complexName').value.trim(), address: document.getElementById('complexAddr').value.trim() || undefined }) });
+            if (r.ok) { showMsg(msgEl, 'ЖК создан.', false); fetchData('complexes'); } else { const d = await r.json(); showMsg(msgEl, d.message || r.statusText, true); }
+          });
+        })();
+        return;
+      }
+      if (tab === 'buildings' && currentUser && (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'ORG_ADMIN' || currentUser.role === 'COMPLEX_MANAGER')) {
+        sec.style.display = 'block';
+        title.textContent = 'Создать здание';
+        (async () => {
+          const complexes = await (await fetch(API + '/complexes', { headers: headers() })).json();
+          const opts = Array.isArray(complexes) ? complexes.map(c => '<option value="' + c.id + '">' + (c.name || c.id) + '</option>').join('') : '';
+          container.innerHTML = '<form id="formCreateBuilding"><label>ЖК <select id="buildingComplexId">' + opts + '</select></label> <input id="buildingName" placeholder="Название здания" required> <input id="buildingAddr" placeholder="Адрес"> <button type="submit">Создать</button></form>';
+          container.querySelector('#formCreateBuilding').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const r = await fetch(API + '/buildings', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ complexId: document.getElementById('buildingComplexId').value, name: document.getElementById('buildingName').value.trim(), address: document.getElementById('buildingAddr').value.trim() || undefined }) });
+            if (r.ok) { showMsg(msgEl, 'Здание создано.', false); fetchData('buildings'); } else { const d = await r.json(); showMsg(msgEl, d.message || r.statusText, true); }
+          });
+        })();
+        return;
+      }
+      if (tab === 'apartments') {
+        sec.style.display = 'block';
+        title.textContent = 'Создать квартиру';
+        (async () => {
+          const buildings = await (await fetch(API + '/buildings', { headers: headers() })).json();
+          const opts = Array.isArray(buildings) ? buildings.map(b => '<option value="' + b.id + '">' + (b.name || b.id) + '</option>').join('') : '';
+          container.innerHTML = '<form id="formCreateApt"><label>Здание <select id="aptBuildingId">' + opts + '</select></label> <input id="aptNumber" placeholder="Номер квартиры" required> <input id="aptFloor" type="number" placeholder="Этаж"> <input id="aptExtension" placeholder="Расширение (SIP/номер для вызова монитора)"> <button type="submit">Создать</button></form>';
+          container.querySelector('#formCreateApt').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const body = { buildingId: parseInt(document.getElementById('aptBuildingId').value, 10), number: document.getElementById('aptNumber').value.trim() };
+            const fl = document.getElementById('aptFloor').value; if (fl) body.floor = parseInt(fl, 10);
+            const ext = document.getElementById('aptExtension').value.trim(); if (ext) body.extension = ext;
+            const r = await fetch(API + '/apartments', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            if (r.ok) { showMsg(msgEl, 'Квартира создана.', false); fetchData('apartments'); } else { const d = await r.json(); showMsg(msgEl, d.message || r.statusText, true); }
+          });
+        })();
+        return;
+      }
+      sec.style.display = 'none';
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      auth();
+    });
+    document.getElementById('logoutBtn').addEventListener('click', logout);
+
+    fetchHealth();
+    if (token) onTokenReady();
+  </script>
+</body>
+</html>
