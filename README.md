@@ -1,16 +1,165 @@
-# grgmobileapp
+# Backend — API управления домофонами (GRG Mobile)
 
-A new Flutter project.
+Серверная часть платформы для управления домофонами и видеодомофонами: мультитенантный REST API, интеграция с панелями Akuvox и Uniview, админка, вебхуки и push-уведомления для мобильного приложения.
 
-## Getting Started
+---
 
-This project is a starting point for a Flutter application.
+## Описание проекта
 
-A few resources to get you started if this is your first Flutter project:
+### Назначение
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+Бэкенд — единая точка входа между **мобильным приложением (Flutter)** и **устройствами** (вызывные панели Akuvox, камеры и NVR Uniview). Приложение общается только с API; бэкенд по типу устройства вызывает нужный протокол (Akuvox Linux API, Uniview LiteAPI HTTP/WebSocket).
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+**Основные возможности:**
+
+- **Мультитенантность**: организации (УК) → жилые комплексы → здания → квартиры. Пользователи с ролями видят только свои ресурсы.
+- **Управление устройствами**: привязка домофонов и камер к зданиям, открытие двери, получение URL видеопотока (RTSP), просмотр событий.
+- **Квартиры и жители**: создание квартир по зданиям, привязка жителей к квартирам (вручную или через заявки из приложения), импорт из CSV/Excel.
+- **События в реальном времени**: WebSocket для push-событий (звонок, открытие двери); вебхуки от панелей Akuvox для входящего вызова и открытия двери; отправка push-уведомлений жителям (Firebase FCM).
+- **Удалённая настройка панелей Akuvox**: синхронизация конфига (вебхуки, whitelist, список квартир) и квартир на панели X912/R20/R25 через скрипт `akuvox_config.py` (contact API и user API).
+
+### Стек
+
+- **NestJS** — фреймворк API
+- **PostgreSQL** — БД (TypeORM, сущности: организации, комплексы, здания, квартиры, пользователи, устройства, события)
+- **JWT** — авторизация
+- **Socket.IO** — WebSocket для событий
+- **Шифрование** (AES-256-GCM) — учётные данные устройств в БД
+
+### Роли пользователей
+
+| Роль | Доступ |
+|------|--------|
+| **SUPER_ADMIN** | Все организации, ЖК, здания, устройства, пользователи |
+| **ORG_ADMIN** | Своя организация (УК) |
+| **COMPLEX_MANAGER** | Свой жилой комплекс |
+| **RESIDENT** | Только здания, в которых есть привязанные квартиры (user_apartments) |
+
+### Поддерживаемые устройства
+
+- **Akuvox** (R20, R25, X912, S532, S562): Akuvox Linux API (HTTP), открытие двери, system info, RTSP URL для видео, вебхуки (события вызова, открытие двери).
+- **Uniview IPC / NVR**: LiteAPI HTTP (Digest), открытие двери, live-url; опционально LiteAPI WebSocket для событий в реальном времени.
+
+### Точки входа
+
+- **REST API**: префикс `/api` (например `POST /api/auth/login`, `GET /api/buildings`, `POST /api/devices/:id/open-door`).
+- **Swagger UI**: `http://localhost:3000/docs` — интерактивная документация API.
+- **Админ-панель**: `http://localhost:3000/api/admin` — веб-интерфейс для управления организациями, ЖК, зданиями, квартирами, устройствами и синхронизации конфига Akuvox.
+- **Health**: `GET /api/health` — проверка работы сервера (без авторизации).
+
+Подробная спецификация API, иерархия данных и сценарии — в [BACKEND.md](BACKEND.md) и [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md).
+
+---
+
+## Запуск
+
+### PostgreSQL (Docker)
+
+Из папки `backend`:
+
+```bash
+docker compose up -d
+```
+
+PostgreSQL будет доступен на `localhost:5432` (база: `doorphone`, пользователь: `postgres`, пароль: `postgres`).
+
+### Переменные окружения
+
+Скопируйте `backend/.env.example` в `backend/.env` и задайте:
+
+- **DB_TYPE=postgres**, **DB_HOST**, **DB_PORT**, **DB_USERNAME**, **DB_PASSWORD**, **DB_NAME** — подключение к БД.
+- **JWT_SECRET** — секрет для подписи JWT.
+- **CREDENTIALS_ENCRYPTION_KEY** — ключ 32 байта (hex или строка) для шифрования учётных данных устройств.
+- **PORT** — порт API (по умолчанию 3000).
+- **WEBHOOK_SECRET** — секрет для приёма вебхуков от панелей (заголовок `X-Webhook-Secret`).
+- **BACKEND_BASE_URL** — URL, по которому панели и приложение достучаются до сервера (для вебхуков и ссылок).
+- **PROVISION_WHITELIST_IP** (опционально) — IP для whitelist на панелях Akuvox при синхронизации конфига.
+
+### Запуск сервера
+
+```bash
+cd backend
+npm install
+npm run build
+npm run start
+```
+
+Режим разработки с hot-reload: `npm run start:dev`.
+
+Таблицы в БД создаются автоматически при первом запуске (TypeORM `synchronize`). Для существующей БД с таблицей `houses` перед обновлением выполните миграцию — см. [scripts/migrate-to-multitenant.md](scripts/migrate-to-multitenant.md).
+
+---
+
+## Вебхуки и приложение
+
+- **Вебхук Akuvox**: `POST /api/webhooks/akuvox` — события от панели (входящий вызов, открытие двери). Тело и заголовок `X-Webhook-Secret` должны соответствовать конфигу панели и `WEBHOOK_SECRET`.
+- Сервер слушает на `0.0.0.0`, чтобы к нему могли обращаться панели в локальной сети и мобильное приложение.
+
+---
+
+## Квартиры и жители (админка)
+
+1. Откройте админку: `http://<IP>:3000/api/admin`, войдите под учёткой с правами (например SUPER_ADMIN).
+2. **Квартиры**: вкладка «Квартиры» → выберите здание → создайте квартиры вручную, «Создать диапазон» или «Импорт квартир» (CSV/Excel).
+3. **Жители**: вкладка «Жители» → выберите здание и квартиру → «Добавить жителя» (email или телефон, роль). Либо «Импорт жителей». Альтернатива: житель в приложении подаёт заявку на квартиру, админ во вкладке «Заявки» одобряет.
+
+После этого жители смогут открывать дверь из приложения и при настройке вебхука/FCM получать push о входящем звонке.
+
+---
+
+## Akuvox (в т.ч. X912): настройка панели от бэкенда
+
+- **Номера квартир** в системе должны совпадать с номерами, которые панель передаёт в вебхуке (`apartmentNumber`).
+- **Расширение (extension)** квартиры — номер для вызова внутреннего монитора; при синхронизации отправляется на панель в контакты/пользователи.
+- **Синхронизация вручную**: вкладка «Устройства» → выберите панель(и) Akuvox → «Синхронизировать конфиг и квартиры». На панель отправляются: URL вебхуков, whitelist и список квартир здания. **R20/R25** — квартиры в Контакты (contact API). **X912, S532, S562** — квартиры в «Каталог » Пользователь» (user API).
+- **Автоматическая синхронизация**: после «Создать диапазон» квартир или импорта квартир по зданию бэкенд в фоне синхронизирует конфиг на все панели Akuvox этого здания.
+- **Одна подсеть**: в `.env` задайте **BACKEND_BASE_URL** так, чтобы панель могла достучаться до сервера. При необходимости настройте **PROVISION_WHITELIST_IP**.
+- **Видеопоток**: приложение получает RTSP-URL и подключается к панели напрямую. Просмотр видео возможен только если телефон в той же сети, что и панель (тот же Wi‑Fi или VPN).
+
+---
+
+## Структура проекта (кратко)
+
+```
+backend/
+├── src/
+│   ├── app.module.ts, main.ts
+│   ├── auth/           # Логин, регистрация, JWT
+│   ├── users/          # Пользователи, user_apartments
+│   ├── access/         # Проверка доступа по ролям и зданиям
+│   ├── organizations/  # УК
+│   ├── residential-complexes/
+│   ├── buildings/      # Здания, устройства, квартиры, импорты
+│   ├── apartments/     # Квартиры, жители, заявки
+│   ├── devices/        # CRUD устройств, Akuvox provisioning
+│   ├── control/        # Открытие двери, live-url, события, test-connection
+│   ├── discovery/      # ONVIF-поиск
+│   ├── events/         # WebSocket, event_log, incoming call, push
+│   ├── credentials/    # Шифрование учётных данных устройств
+│   ├── webhooks/       # Приём вебхуков Akuvox
+│   └── vendors/
+│       ├── akuvox/     # Akuvox Linux API client
+│       └── uniview/    # Uniview LiteAPI HTTP + WebSocket
+├── public/
+│   └── admin.html      # Админ-панель (SPA)
+├── scripts/            # Миграции, сброс БД, выдача ролей
+├── .env.example
+├── BACKEND.md          # Подробное описание API и БД
+└── SYSTEM_DESIGN.md    # Роли, иерархия, сценарии
+```
+
+---
+
+## Быстрые команды
+
+- Очистить данные в БД: `node scripts/reset-database.js`
+- Выдать SUPER_ADMIN: `node scripts/make-super-admin.js <email>`
+- Создание БД PostgreSQL (Windows): см. [scripts/create-db-windows.md](scripts/create-db-windows.md)
+
+---
+
+## Дополнительная документация
+
+- [BACKEND.md](BACKEND.md) — полное описание API, БД, авторизации, устройств и протоколов.
+- [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) — роли, иерархия, сценарии подключения устройств.
+- [docs/FULL_SYSTEM_SPEC.md](docs/FULL_SYSTEM_SPEC.md) — спецификация системы, матрица доступов, сценарий входящего звонка.
