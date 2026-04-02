@@ -3,6 +3,7 @@ import 'package:video_player/video_player.dart';
 
 import '../api/akuvox_client.dart';
 import '../models/device_settings.dart';
+import '../theme/app_theme.dart';
 
 class DoorControlScreen extends StatefulWidget {
   final DeviceSettings settings;
@@ -83,7 +84,11 @@ class _DoorControlScreenState extends State<DoorControlScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Управление дверью')),
+      appBar: AppBar(
+        title: const Text('Управление дверью'),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.textPrimary,
+      ),
       body: Column(
         children: [
           Expanded(
@@ -101,17 +106,18 @@ class _DoorControlScreenState extends State<DoorControlScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
+                        color: const Color(0x33FF6B6B),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0x66FF6B6B)),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.error_outline, color: Colors.red[700]),
+                          const Icon(Icons.error_outline, color: Color(0xFFFF6B6B)),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _error!,
-                              style: TextStyle(color: Colors.red[700]),
+                              style: const TextStyle(color: Color(0xFFFF6B6B)),
                             ),
                           ),
                         ],
@@ -149,21 +155,29 @@ class _DoorControlScreenState extends State<DoorControlScreen> {
   Widget _buildVideoSection() {
     if (widget.settings.rtspUrl == null || widget.settings.rtspUrl!.isEmpty) {
       return Container(
-        color: Colors.grey[200],
+        color: const Color(0xFF0D0717),
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.videocam_off, size: 64, color: Colors.grey[400]),
-              const SizedBox(height: 16),
-              Text(
-                'Камера не настроена',
-                style: TextStyle(color: Colors.grey[600]),
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: const Color(0x338A2BE2),
+                ),
+                child: const Icon(Icons.videocam_off, size: 36, color: Color(0xFFDACBF5)),
               ),
-              const SizedBox(height: 8),
-              Text(
+              const SizedBox(height: 16),
+              const Text(
+                'Камера не настроена',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              const Text(
                 'Укажите RTSP URL в настройках',
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 12, color: Color(0xFFDACBF5)),
               ),
             ],
           ),
@@ -173,14 +187,14 @@ class _DoorControlScreenState extends State<DoorControlScreen> {
 
     if (_videoController == null || !_videoController!.value.isInitialized) {
       return Container(
-        color: Colors.black87,
+        color: Colors.black,
         child: const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(color: Colors.white),
+              CircularProgressIndicator(color: Color(0xFF8A2BE2)),
               SizedBox(height: 16),
-              Text('Загрузка видео...', style: TextStyle(color: Colors.white)),
+              Text('Загрузка видео...', style: TextStyle(color: Color(0xFFDACBF5))),
             ],
           ),
         ),

@@ -134,12 +134,27 @@ class _NavItem extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
-        child: Padding(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          margin: const EdgeInsets.symmetric(horizontal: 4),
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: isActive ? AppColors.purple.withValues(alpha: 0.15) : Colors.transparent,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 22, color: color),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  isActive ? _filledIcon(icon) : icon,
+                  key: ValueKey(isActive),
+                  size: 22,
+                  color: color,
+                ),
+              ),
               const SizedBox(height: 4),
               Text(
                 label,
@@ -155,5 +170,11 @@ class _NavItem extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  IconData _filledIcon(IconData icon) {
+    if (icon == Icons.home_outlined) return Icons.home;
+    if (icon == Icons.settings_outlined) return Icons.settings;
+    return icon;
   }
 }
