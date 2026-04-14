@@ -5,6 +5,7 @@ import '../models/auth_user.dart';
 import '../models/device_settings.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/slide_route.dart';
 import 'add_device_screen.dart';
 import 'applications_screen.dart';
 import 'door_control_backend_screen.dart';
@@ -146,9 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
             subtitle: 'Открыть дверь, просмотр камеры',
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => DoorControlScreen(settings: s),
-              ),
+              SlideRoute(builder: (_) => DoorControlScreen(settings: s)),
             ),
           ),
           const SizedBox(height: 12),
@@ -159,9 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
             subtitle: 'История событий двери',
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => DoorLogScreen(settings: s),
-              ),
+              SlideRoute(builder: (_) => DoorLogScreen(settings: s)),
             ),
           ),
           const SizedBox(height: 12),
@@ -172,9 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
             subtitle: 'Системные данные панели',
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => SystemInfoScreen(settings: s),
-              ),
+              SlideRoute(builder: (_) => SystemInfoScreen(settings: s)),
             ),
           ),
           if (widget.onOpenSettingsTab != null) ...[
@@ -442,7 +437,7 @@ class _BuildingCard extends StatelessWidget {
       child: InkWell(
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(
+          SlideRoute(
             builder: (_) => _BuildingDevicesScreen(
               building: building,
               client: client,
@@ -553,7 +548,7 @@ class _BuildingDevicesScreenState extends State<_BuildingDevicesScreen> {
   Future<void> _openAddDevice() async {
     final result = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(
+      SlideRoute(
         builder: (_) => AddDeviceScreen(
           client: widget.client,
           buildingId: widget.building.id,
@@ -567,7 +562,7 @@ class _BuildingDevicesScreenState extends State<_BuildingDevicesScreen> {
   Future<void> _openEditDevice(DeviceDto d) async {
     final result = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(
+      SlideRoute(
         builder: (_) => AddDeviceScreen(
           client: widget.client,
           buildingId: widget.building.id,
@@ -714,7 +709,7 @@ class _BuildingDevicesScreenState extends State<_BuildingDevicesScreen> {
                                 : const Icon(Icons.chevron_right, color: AppColors.textSecondary),
                             onTap: () => Navigator.push(
                               context,
-                              MaterialPageRoute(
+                              SlideRoute(
                                 builder: (_) => DoorControlBackendScreen(
                                   client: widget.client,
                                   deviceId: d.id,

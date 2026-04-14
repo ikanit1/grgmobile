@@ -30,6 +30,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   bool _loading = false;
+  bool _passwordVisible = false;
   String? _error;
 
   @override
@@ -158,9 +159,17 @@ class _AuthScreenState extends State<AuthScreen> {
                   decoration: InputDecoration(
                     labelText: 'Пароль',
                     hintText: _isLoginMode ? null : 'не менее 6 символов',
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _passwordVisible ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                        color: AppColors.textSecondary,
+                        size: 20,
+                      ),
+                      onPressed: () => setState(() => _passwordVisible = !_passwordVisible),
+                    ),
                   ),
                   style: const TextStyle(color: AppColors.textPrimary),
-                  obscureText: true,
+                  obscureText: !_passwordVisible,
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _submit(),
                 ),
