@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { lastValueFrom } from 'rxjs';
 import { AxiosResponse } from 'axios';
@@ -10,6 +10,8 @@ import { CredentialsService } from '../../credentials/credentials.service';
 /** LiteAPI HTTP client — IPC & NVR (doc: LiteAPI Document for IPC V5.07, NVR V5.14). Auth: HTTP Digest per 3.2. */
 @Injectable()
 export class UniviewLiteapiHttpClient {
+  private readonly logger = new Logger(UniviewLiteapiHttpClient.name);
+
   constructor(
     private readonly http: HttpService,
     private readonly credentialsService: CredentialsService,
@@ -113,20 +115,24 @@ export class UniviewLiteapiHttpClient {
       await this.request(device, 'POST', `/Channels/${ch}/OpenDoor`, {});
       return { success: true, message: 'Дверь открыта' };
     } catch (e: any) {
-      const msg = e?.message ?? 'Не удалось открыть дверь';
-      return { success: false, message: msg };
+      this.logger.error(`openDoor failed: ${e?.message}`, e?.stack);
+      return { success: false, message: 'Не удалось открыть дверь' };
     }
   }
 
-  async triggerRelay(device: Device, relayNum: number) {
+  async triggerRelay(device: Device, relayNum: number): Promise<{ success: boolean; message: string }> {
     // LiteAPI IPC 6.10.2 / NVR: Serial Port I/O — Alarm Output (Digital Output)
-    await this.request(device, 'PUT', `/IO/Outputs/${relayNum}`, {
-      Enabled: 1,
-      Active: 1,
-      Duration: 5,
-    });
-
-    return { success: true, message: 'Реле сработало' };
+    try {
+      await this.request(device, 'PUT', `/IO/Outputs/${relayNum}`, {
+        Enabled: 1,
+        Active: 1,
+        Duration: 5,
+      });
+      return { success: true, message: 'Реле сработало' };
+    } catch (e: any) {
+      this.logger.error(`triggerRelay failed: ${e?.message}`, e?.stack);
+      return { success: false, message: 'Не удалось сработать реле' };
+    }
   }
 
   /** LiteAPI doc IPC 6.1.5 / NVR: System/Equipment — device info */
@@ -135,9 +141,148 @@ export class UniviewLiteapiHttpClient {
     return (data?.Data ?? data ?? {}) as Record<string, unknown>;
   }
 
-  /** LiteAPI: events via HTTP (if available); else use WS cache. Returns empty for now. */
-  async getEvents(_device: Device, _from?: string, _to?: string, _limit?: number): Promise<unknown[]> {
-    return [];
+  /**
+   * LiteAPI: door access log via HTTP.
+   * IPC: GET /Channels/{ch}/DoorLogs — returns list of door access events.
+   * Params: StartTime/EndTime (ISO 8601 or epoch sec), Count (max records).
+   */
+  async getEvents(device: Device, from?: string, to?: string, limit?: number): Promise<unknown[]> {
+    const ch = device.defaultChannel ?? 1;
+    const count = limit ?? 100;
+    const params: string[] = [`Count=${count}`];
+    if (from) params.push(`StartTime=${encodeURIComponent(from)}`);
+    if (to) params.push(`EndTime=${encodeURIComponent(to)}`);
+    const path = `/Channels/${ch}/DoorLogs?${params.join('&')}`;
+    try {
+      const data = await this.request(device, 'GET', path);
+      const list = data?.Data?.DoorLogs ?? data?.Data ?? [];
+      return Array.isArray(list) ? list : [];
+    } catch (e: any) {
+      this.logger.warn(`getEvents failed (${device.host}): ${e?.message}`);
+      return [];
+    }
+  }
+
+  /** LiteAPI NVR: GET /Channels/System/DeviceInfo — list of channels/cameras. */
+  async getChannels(device: Device): Promise<unknown[]> {
+    const data = await this.request(device, 'GET', '/Channels/System/DeviceInfo');
+    const list = data?.Data?.Channels ?? data?.Data ?? (Array.isArray(data?.Data) ? data.Data : []);
+    return Array.isArray(list) ? list : (list ? [list] : []);
+  }
+
+  /** LiteAPI NVR: GET /Channels/System/ChannelDetailInfo — detail per channel. */
+  async getChannelDetail(device: Device): Promise<unknown[]> {
+    const data = await this.request(device, 'GET', '/Channels/System/ChannelDetailInfo');
+    const list = data?.Data?.Channels ?? data?.Data ?? (Array.isArray(data?.Data) ? data.Data : []);
+    return Array.isArray(list) ? list : (list ? [list] : []);
+  }
+
+  /** LiteAPI: GET /Channels/<id>/System/BasicInfo — single channel basic info. */
+  async getChannelInfo(device: Device, channelId: number): Promise<Record<string, unknown>> {
+    const data = await this.request(device, 'GET', `/Channels/${channelId}/System/BasicInfo`);
+    return (data?.Data ?? data ?? {}) as Record<string, unknown>;
+  }
+
+  /**
+   * Search recordings on NVR/IPC for a time range.
+   * LiteAPI: GET /Channels/{ch}/Record/SearchByTime
+   */
+  async getRecordings(
+    device: Device,
+    channelId: number,
+    from?: string,
+    to?: string,
+  ): Promise<unknown[]> {
+    const ch = channelId ?? device.defaultChannel ?? 1;
+    const params = new URLSearchParams();
+    if (from) params.append('StartTime', from);
+    if (to) params.append('EndTime', to);
+    const qs = params.toString() ? `?${params}` : '';
+    try {
+      const resp = await this.request(device, 'GET', `/Channels/${ch}/Record/SearchByTime${qs}`);
+      return resp?.Data?.RecordInfos ?? resp?.Data?.Records ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Construct RTSP playback URL for NVR/IPC recording.
+   * Uniview playback RTSP format: rtsp://user:pass@host:port/media/videoN?starttime=X&endtime=Y
+   */
+  async getPlaybackUrl(
+    device: Device,
+    channelId: number,
+    startTime: string,
+    endTime: string,
+  ): Promise<string> {
+    const ch = channelId ?? device.defaultChannel ?? 1;
+    const { username, password } = this.getAuth(device);
+    const host = device.host;
+    const port = device.rtspPort ?? 554;
+    const start = encodeURIComponent(startTime);
+    const end = encodeURIComponent(endTime);
+    return `rtsp://${username}:${password}@${host}:${port}/media/video${ch}?starttime=${start}&endtime=${end}`;
+  }
+
+  /**
+   * Get recording timeline for a day (segments with start/end times).
+   * LiteAPI: GET /Channels/{ch}/Record/Timeline?Date=YYYY-MM-DD
+   */
+  async getRecordingTimeline(
+    device: Device,
+    channelId: number,
+    date: string,
+  ): Promise<unknown[]> {
+    const ch = channelId ?? device.defaultChannel ?? 1;
+    try {
+      const resp = await this.request(device, 'GET', `/Channels/${ch}/Record/Timeline?Date=${date}`);
+      return resp?.Data?.Segments ?? resp?.Data?.Timeline ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * LiteAPI: GET /Channels/<id>/Media/Video/Streams/<streamId>/PreviewSnapshot (or Snapshot).
+   * Returns JPEG buffer. streamId: 0 = main, 1 = sub.
+   */
+  async getSnapshot(device: Device, channelId: number, streamId: number = 0): Promise<Buffer> {
+    const path = `/Channels/${channelId}/Media/Video/Streams/${streamId}/PreviewSnapshot`;
+    const base = this.baseUrl(device);
+    const url = `${base}${path}`;
+    const uri = `/LAPI/V1.0${path}`;
+    const { username, password } = this.getAuth(device);
+
+    let config: any = {
+      method: 'GET',
+      url,
+      responseType: 'arraybuffer',
+      validateStatus: (s: number) => s < 500,
+      headers: {},
+    };
+    if (username && password) {
+      config.headers.Authorization = `Basic ${Buffer.from(`${username}:${password}`, 'utf-8').toString('base64')}`;
+    }
+
+    let res = await lastValueFrom(this.http.request(config)) as AxiosResponse;
+
+    if (res.status === 401 && username && password) {
+      const wwwAuth = res.headers?.['www-authenticate'] ?? res.headers?.['WWW-Authenticate'];
+      const challenge = typeof wwwAuth === 'string' ? parseWwwAuthenticate(wwwAuth) : null;
+      if (challenge) {
+        const digestHeader = buildDigestHeader('GET', uri, username, password, challenge, undefined);
+        config = { ...config, headers: { ...config.headers, Authorization: digestHeader } };
+        res = await lastValueFrom(this.http.request(config)) as AxiosResponse;
+      }
+    }
+
+    if (res.status >= 400) {
+      const msg = typeof res.data === 'string' ? res.data : (res.data as any)?.message ?? res.statusText;
+      throw new Error(`LiteAPI snapshot ${res.status}: ${msg}`);
+    }
+    const buf = res.data as ArrayBuffer;
+    return Buffer.from(buf);
   }
 }
 
