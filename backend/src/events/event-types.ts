@@ -47,3 +47,18 @@ export const EVENT_TYPE_ORG_DELETED = 'org_deleted';
 // Buildings
 export const EVENT_TYPE_BUILDING_CREATED = 'building_created';
 export const EVENT_TYPE_BUILDING_DELETED = 'building_deleted';
+
+// Uniview webhook events (from camera/IPC)
+export const EVENT_TYPE_UNIVIEW_DOOR_OPEN = 'uniview_door_open';
+export const EVENT_TYPE_UNIVIEW_MOTION = 'uniview_motion';
+export const EVENT_TYPE_UNIVIEW_ALARM = 'uniview_alarm';
+export const EVENT_TYPE_UNIVIEW_TAMPER = 'uniview_tamper';
+
+// Uniview doorbell / intercom events
+export const EVENT_TYPE_UNIVIEW_DOORBELL = 'uniview_doorbell';
+export const EVENT_TYPE_UNIVIEW_CALL_INCOMING = 'uniview_call_incoming';
+
+// Device connection status
+export const EVENT_TYPE_DEVICE_WS_CONNECTED = 'device_ws_connected';
+export const EVENT_TYPE_DEVICE_WS_DISCONNECTED = 'device_ws_disconnected';
+export const EVENT_TYPE_DEVICE_WS_RECONNECTING = 'device_ws_reconnecting';
