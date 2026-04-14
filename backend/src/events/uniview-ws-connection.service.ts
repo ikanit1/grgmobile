@@ -98,7 +98,8 @@ export class UniviewWsConnectionService implements OnModuleDestroy {
       payload,
     };
 
-    this.eventLogService.create(device.id, eventType, payload as Record<string, unknown>).catch(() => {});
+    const loggedType = DOORBELL_EVENT_TYPES.has(eventType) ? EVENT_TYPE_UNIVIEW_DOORBELL : eventType;
+    this.eventLogService.create(device.id, loggedType, payload as Record<string, unknown>).catch(() => {});
     this.eventsGateway.emitDeviceEvent(device.id, normalized);
     if (buildingId) {
       this.eventsGateway.emitToHouse(buildingId, normalized);
@@ -142,6 +143,7 @@ export class UniviewWsConnectionService implements OnModuleDestroy {
     this.emitConnectionStatus(device.id, buildingId, EVENT_TYPE_DEVICE_WS_RECONNECTING);
     this.logger.log(`Scheduling reconnect for device ${device.id} in ${state.backoffMs}ms`);
 
+    if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
     state.reconnectTimer = setTimeout(async () => {
       await this.connectDevice(state);
     }, state.backoffMs);
