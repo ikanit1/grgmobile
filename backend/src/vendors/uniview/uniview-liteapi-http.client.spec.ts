@@ -290,4 +290,78 @@ describe('UniviewLiteapiHttpClient', () => {
       expect(result).toEqual([]);
     });
   });
+
+  // ---- getPtzCapabilities ----
+
+  describe('getPtzCapabilities', () => {
+    it('returns capabilities from Data', async () => {
+      const caps = { Supported: true, PanSupported: true, TiltSupported: true, ZoomSupported: true };
+      const req = jest.fn().mockReturnValue(of(axiosResp({ Data: caps })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc(null));
+      const result = await client.getPtzCapabilities(device, 1);
+      expect(result).toEqual(caps);
+    });
+
+    it('returns { Supported: false } on error', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ message: 'Not Found' }, 404)));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc(null));
+      const result = await client.getPtzCapabilities(device, 1);
+      expect(result).toEqual({ Supported: false });
+    });
+  });
+
+  // ---- ptzMove ----
+
+  describe('ptzMove', () => {
+    it('sends PUT with direction and speed', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc(null));
+      await client.ptzMove(device, 1, 'left', 50);
+      expect(req).toHaveBeenCalled();
+      const callConfig = req.mock.calls[0][0];
+      expect(callConfig.method).toBe('PUT');
+      expect(callConfig.url).toContain('/Channels/1/PTZ/ContinuousMove');
+    });
+  });
+
+  // ---- ptzStop ----
+
+  describe('ptzStop', () => {
+    it('sends PUT with zero speed', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc(null));
+      await client.ptzStop(device, 1);
+      expect(req).toHaveBeenCalled();
+      const callConfig = req.mock.calls[0][0];
+      expect(callConfig.method).toBe('PUT');
+      expect(callConfig.url).toContain('/Channels/1/PTZ/ContinuousMove');
+      expect(callConfig.data).toBe(JSON.stringify({ Pan: 0, Tilt: 0, Zoom: 0 }));
+    });
+  });
+
+  // ---- getPtzPresets ----
+
+  describe('getPtzPresets', () => {
+    it('returns presets list', async () => {
+      const presets = [{ ID: 1, Name: 'Home' }, { ID: 2, Name: 'Gate' }];
+      const req = jest.fn().mockReturnValue(of(axiosResp({ Data: { Presets: presets } })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc(null));
+      const result = await client.getPtzPresets(device, 1);
+      expect(result).toEqual(presets);
+    });
+  });
+
+  // ---- gotoPreset ----
+
+  describe('gotoPreset', () => {
+    it('sends PUT to preset goto endpoint', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc(null));
+      await client.gotoPreset(device, 1, 2);
+      expect(req).toHaveBeenCalled();
+      const callConfig = req.mock.calls[0][0];
+      expect(callConfig.method).toBe('PUT');
+      expect(callConfig.url).toContain('/Channels/1/PTZ/Presets/2/Goto');
+    });
+  });
 });

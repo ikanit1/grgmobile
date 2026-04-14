@@ -243,6 +243,61 @@ export class UniviewLiteapiHttpClient {
     }
   }
 
+  // ─── PTZ Control ───
+
+  /** Check if device supports PTZ. Returns { Supported: boolean, ... } */
+  async getPtzCapabilities(device: Device, channelId: number): Promise<Record<string, unknown>> {
+    const ch = channelId ?? device.defaultChannel ?? 1;
+    try {
+      const resp = await this.request(device, 'GET', `/Channels/${ch}/PTZ/Capabilities`);
+      return resp?.Data ?? { Supported: false };
+    } catch {
+      return { Supported: false };
+    }
+  }
+
+  /**
+   * Continuous PTZ movement.
+   * direction: 'up' | 'down' | 'left' | 'right' | 'zoomin' | 'zoomout'
+   * speed: 1-100
+   */
+  async ptzMove(device: Device, channelId: number, direction: string, speed: number): Promise<void> {
+    const ch = channelId ?? device.defaultChannel ?? 1;
+    const dirMap: Record<string, { Pan: number; Tilt: number; Zoom: number }> = {
+      left:    { Pan: -speed, Tilt: 0, Zoom: 0 },
+      right:   { Pan: speed,  Tilt: 0, Zoom: 0 },
+      up:      { Pan: 0, Tilt: speed,  Zoom: 0 },
+      down:    { Pan: 0, Tilt: -speed, Zoom: 0 },
+      zoomin:  { Pan: 0, Tilt: 0, Zoom: speed },
+      zoomout: { Pan: 0, Tilt: 0, Zoom: -speed },
+    };
+    const body = dirMap[direction] ?? { Pan: 0, Tilt: 0, Zoom: 0 };
+    await this.request(device, 'PUT', `/Channels/${ch}/PTZ/ContinuousMove`, body);
+  }
+
+  /** Stop PTZ movement. */
+  async ptzStop(device: Device, channelId: number): Promise<void> {
+    const ch = channelId ?? device.defaultChannel ?? 1;
+    await this.request(device, 'PUT', `/Channels/${ch}/PTZ/ContinuousMove`, { Pan: 0, Tilt: 0, Zoom: 0 });
+  }
+
+  /** Get list of PTZ presets. */
+  async getPtzPresets(device: Device, channelId: number): Promise<unknown[]> {
+    const ch = channelId ?? device.defaultChannel ?? 1;
+    try {
+      const resp = await this.request(device, 'GET', `/Channels/${ch}/PTZ/Presets`);
+      return resp?.Data?.Presets ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Move camera to a saved preset position. */
+  async gotoPreset(device: Device, channelId: number, presetId: number): Promise<void> {
+    const ch = channelId ?? device.defaultChannel ?? 1;
+    await this.request(device, 'PUT', `/Channels/${ch}/PTZ/Presets/${presetId}/Goto`, {});
+  }
+
   /**
    * LiteAPI: GET /Channels/<id>/Media/Video/Streams/<streamId>/PreviewSnapshot (or Snapshot).
    * Returns JPEG buffer. streamId: 0 = main, 1 = sub.
