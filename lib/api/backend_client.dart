@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 import 'package:http/http.dart' as http;
 
@@ -14,7 +15,19 @@ class BackendClient {
 
   String? _token;
 
-  String get baseUrl => _config.apiUrl;
+  /// Returns the API base URL.
+  /// In release mode, warns if using HTTP (except localhost or relative paths).
+  String get baseUrl {
+    final url = _config.apiUrl;
+    if (kReleaseMode &&
+        url.startsWith('http://') &&
+        !url.startsWith('http://localhost') &&
+        !url.startsWith('http://127.0.0.1')) {
+      // In production, should use HTTPS. Log a warning but don't throw to avoid crashes.
+      debugPrint('WARNING: Using HTTP for API URL in release mode. This is insecure. Use HTTPS.');
+    }
+    return url;
+  }
 
   Future<String?> getToken() async {
     _token ??= await _authStorage.getToken();
@@ -55,6 +68,9 @@ class BackendClient {
     bool withAuth = true,
   }) async {
     final uri = Uri.parse('$baseUrl$path');
+    debugPrint('[BackendClient] POST $uri');
+    debugPrint('[BackendClient] Headers: ${await _headers(withAuth: withAuth)}');
+    if (body != null) debugPrint('[BackendClient] Body: ${jsonEncode(body)}');
     return http.post(
       uri,
       headers: await _headers(withAuth: withAuth),
@@ -75,8 +91,29 @@ class BackendClient {
     );
   }
 
-  Future<http.Response> _delete(String path, {bool withAuth = true}) async {
+  Future<http.Response> _put(
+    String path, {
+    Map<String, dynamic>? body,
+    bool withAuth = true,
+  }) async {
     final uri = Uri.parse('$baseUrl$path');
+    return http.put(
+      uri,
+      headers: await _headers(withAuth: withAuth),
+      body: body != null ? jsonEncode(body) : null,
+    );
+  }
+
+  Future<http.Response> _delete(String path, {bool withAuth = true, Map<String, dynamic>? body}) async {
+    final uri = Uri.parse('$baseUrl$path');
+    if (body != null && body.isNotEmpty) {
+      final req = http.Request('DELETE', uri);
+      req.headers.addAll(await _headers(withAuth: withAuth));
+      req.body = jsonEncode(body);
+      final streamed = await req.send();
+      final bodyStr = await streamed.stream.bytesToString();
+      return http.Response(bodyStr, streamed.statusCode);
+    }
     return http.delete(uri, headers: await _headers(withAuth: withAuth));
   }
 
@@ -130,10 +167,18 @@ class BackendClient {
     return res;
   }
 
-  Future<http.Response> _deleteWithRetry(String path) async {
-    var res = await _delete(path);
+  Future<http.Response> _putWithRetry(String path, {Map<String, dynamic>? body}) async {
+    var res = await _put(path, body: body);
     if (res.statusCode == 401 && await _tryRefresh()) {
-      res = await _delete(path);
+      res = await _put(path, body: body);
+    }
+    return res;
+  }
+
+  Future<http.Response> _deleteWithRetry(String path, {Map<String, dynamic>? body}) async {
+    var res = await _delete(path, body: body);
+    if (res.statusCode == 401 && await _tryRefresh()) {
+      res = await _delete(path, body: body);
     }
     return res;
   }
@@ -171,7 +216,10 @@ class BackendClient {
     if (email != null && email.isNotEmpty) body['email'] = email;
     if (phone != null && phone.isNotEmpty) body['phone'] = phone;
     if (name != null && name.isNotEmpty) body['name'] = name;
+    debugPrint('[BackendClient] Calling register with email=$email, phone=$phone');
     final res = await _post('auth/register', body: body, withAuth: false);
+    debugPrint('[BackendClient] Response status: ${res.statusCode}');
+    debugPrint('[BackendClient] Response body: ${res.body}');
     if (res.statusCode != 200 && res.statusCode != 201) {
       throw BackendException(_errorMessage(res), res.statusCode);
     }
@@ -180,9 +228,18 @@ class BackendClient {
     return LoginResult(token: data['token'] as String, user: AuthUser.fromJson(data['user'] as Map<String, dynamic>));
   }
 
+  /// Logout: invalidate refresh token on backend (POST /auth/logout) and clear local tokens (ТЗ 3.8).
+  /// Local data is always cleared even if the backend request fails.
   Future<void> logout() async {
-    await setToken(null);
-    await _authStorage.clear();
+    try {
+      await _postWithRetry('auth/logout', body: {});
+    } catch (e) {
+      // Логируем, но всё равно чистим локальные данные
+      print('Backend logout failed: $e');
+    } finally {
+      await setToken(null);
+      await _authStorage.clear();
+    }
   }
 
   // --- Profile ---
@@ -278,6 +335,176 @@ class BackendClient {
     if (res.statusCode != 200) throw BackendException(_errorMessage(res), res.statusCode);
     final list = jsonDecode(res.body) as List<dynamic>;
     return list.map((e) => DeviceEventDto.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  // ─── Recordings / Playback ───
+
+  Future<List<Map<String, dynamic>>> getRecordings(int deviceId, {int? channelId, String? from, String? to}) async {
+    final params = <String, String>{};
+    if (channelId != null) params['channelId'] = channelId.toString();
+    if (from != null) params['from'] = from;
+    if (to != null) params['to'] = to;
+    final qs = params.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&');
+    final res = await _getWithRetry('devices/$deviceId/recordings${qs.isNotEmpty ? '?$qs' : ''}');
+    if (res.statusCode != 200) throw BackendException(_errorMessage(res), res.statusCode);
+    final body = jsonDecode(res.body);
+    if (body is List) return body.cast<Map<String, dynamic>>();
+    return [];
+  }
+
+  Future<String> getPlaybackUrl(int deviceId, {int? channelId, required String from, required String to}) async {
+    final params = <String, String>{'from': from, 'to': to};
+    if (channelId != null) params['channelId'] = channelId.toString();
+    final qs = params.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&');
+    final res = await _getWithRetry('devices/$deviceId/playback-url?$qs');
+    if (res.statusCode != 200) throw BackendException(_errorMessage(res), res.statusCode);
+    final body = jsonDecode(res.body);
+    return (body['url'] as String?) ?? '';
+  }
+
+  Future<List<Map<String, dynamic>>> getRecordingTimeline(int deviceId, {int? channelId, required String date}) async {
+    final params = <String, String>{'date': date};
+    if (channelId != null) params['channelId'] = channelId.toString();
+    final qs = params.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&');
+    final res = await _getWithRetry('devices/$deviceId/recording-timeline?$qs');
+    if (res.statusCode != 200) throw BackendException(_errorMessage(res), res.statusCode);
+    final body = jsonDecode(res.body);
+    if (body is List) return body.cast<Map<String, dynamic>>();
+    return [];
+  }
+
+  // ─── PTZ ───
+
+  Future<Map<String, dynamic>> getPtzCapabilities(int deviceId, {int? channelId}) async {
+    final qs = channelId != null ? '?channelId=$channelId' : '';
+    final res = await _getWithRetry('devices/$deviceId/ptz/capabilities$qs');
+    if (res.statusCode != 200) return {'Supported': false};
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<void> ptzMove(int deviceId, String direction, {int? channelId, int speed = 50}) async {
+    final body = <String, dynamic>{'direction': direction, 'speed': speed};
+    if (channelId != null) body['channelId'] = channelId;
+    final res = await _postWithRetry('devices/$deviceId/ptz/move', body: body);
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      throw BackendException(_errorMessage(res), res.statusCode);
+    }
+  }
+
+  Future<void> ptzStop(int deviceId, {int? channelId}) async {
+    final body = <String, dynamic>{};
+    if (channelId != null) body['channelId'] = channelId;
+    final res = await _postWithRetry('devices/$deviceId/ptz/stop', body: body);
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      throw BackendException(_errorMessage(res), res.statusCode);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getPtzPresets(int deviceId, {int? channelId}) async {
+    final qs = channelId != null ? '?channelId=$channelId' : '';
+    final res = await _getWithRetry('devices/$deviceId/ptz/presets$qs');
+    if (res.statusCode != 200) return [];
+    final body = jsonDecode(res.body);
+    if (body is List) return body.cast<Map<String, dynamic>>();
+    return [];
+  }
+
+  Future<void> gotoPreset(int deviceId, int presetId, {int? channelId}) async {
+    final body = <String, dynamic>{'presetId': presetId};
+    if (channelId != null) body['channelId'] = channelId;
+    final res = await _postWithRetry('devices/$deviceId/ptz/goto-preset', body: body);
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      throw BackendException(_errorMessage(res), res.statusCode);
+    }
+  }
+
+  /// Last N events across all accessible devices (dashboard). GET /events?limit=5
+  Future<List<RecentEventDto>> getRecentEvents({int limit = 5}) async {
+    final res = await _getWithRetry('events?limit=$limit');
+    if (res.statusCode != 200) throw BackendException(_errorMessage(res), res.statusCode);
+    final list = jsonDecode(res.body) as List<dynamic>;
+    return list.map((e) => RecentEventDto.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// Unread events count for badge. GET /events/unread-count
+  Future<int> getUnreadEventsCount() async {
+    final res = await _getWithRetry('events/unread-count');
+    if (res.statusCode != 200) throw BackendException(_errorMessage(res), res.statusCode);
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return data['count'] as int? ?? 0;
+  }
+
+  /// Akuvox device status (system + sip). GET /devices/:id/status. Returns 400 for non-Akuvox.
+  Future<Map<String, dynamic>?> getDeviceStatus(int deviceId) async {
+    final res = await _getWithRetry('devices/$deviceId/status');
+    if (res.statusCode == 400) return null;
+    if (res.statusCode != 200) return null;
+    return jsonDecode(res.body) as Map<String, dynamic>?;
+  }
+
+  // --- Panel residents (Akuvox) ---
+
+  Future<PanelResidentsResponse> getResidents(int deviceId, {int page = 1, int limit = 50, String? search, String? syncStatus}) async {
+    var path = 'devices/$deviceId/residents?page=$page&limit=$limit';
+    if (search != null && search.isNotEmpty) path += '&search=${Uri.encodeComponent(search)}';
+    if (syncStatus != null && syncStatus.isNotEmpty) path += '&syncStatus=${Uri.encodeComponent(syncStatus)}';
+    final res = await _getWithRetry(path);
+    if (res.statusCode != 200) throw BackendException(_errorMessage(res), res.statusCode);
+    return PanelResidentsResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
+  Future<PanelResident> createResident(int deviceId, CreatePanelResidentDto dto) async {
+    final res = await _postWithRetry('devices/$deviceId/residents', body: dto.toJson());
+    if (res.statusCode != 200 && res.statusCode != 201) throw BackendException(_errorMessage(res), res.statusCode);
+    return PanelResident.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
+  Future<PanelResident> updateResident(int deviceId, String panelUserId, Map<String, dynamic> dto) async {
+    final res = await _putWithRetry('devices/$deviceId/residents/${Uri.encodeComponent(panelUserId)}', body: dto);
+    if (res.statusCode != 200) throw BackendException(_errorMessage(res), res.statusCode);
+    return PanelResident.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
+  Future<void> deleteResident(int deviceId, String panelUserId) async {
+    final res = await _deleteWithRetry('devices/$deviceId/residents/${Uri.encodeComponent(panelUserId)}');
+    if (res.statusCode != 200 && res.statusCode != 204) throw BackendException(_errorMessage(res), res.statusCode);
+  }
+
+  Future<Map<String, dynamic>> syncResidents(int deviceId) async {
+    final res = await _postWithRetry('devices/$deviceId/residents/sync', body: {});
+    if (res.statusCode != 200 && res.statusCode != 201) throw BackendException(_errorMessage(res), res.statusCode);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> importResidentsFromApartments(int deviceId) async {
+    final res = await _postWithRetry('devices/$deviceId/residents/import-from-apartments', body: {});
+    if (res.statusCode != 200 && res.statusCode != 201) throw BackendException(_errorMessage(res), res.statusCode);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> bulkImportResidents(int deviceId, List<CreatePanelResidentDto> residents) async {
+    final res = await _postWithRetry('devices/$deviceId/residents/bulk', body: {'residents': residents.map((e) => e.toJson()).toList()});
+    if (res.statusCode != 200 && res.statusCode != 201) throw BackendException(_errorMessage(res), res.statusCode);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<void> bulkDeleteResidents(int deviceId, List<String> panelUserIds) async {
+    final res = await _deleteWithRetry('devices/$deviceId/residents/bulk', body: {'panelUserIds': panelUserIds});
+    if (res.statusCode != 200 && res.statusCode != 204) {
+      final body = res.body.isNotEmpty ? jsonDecode(res.body) : null;
+      throw BackendException(body is Map ? (body['message'] as String? ?? res.body) : res.body, res.statusCode);
+    }
+  }
+
+  Future<ResidentsSyncStatus> getResidentsSyncStatus(int deviceId) async {
+    final res = await _getWithRetry('devices/$deviceId/residents/sync-status');
+    if (res.statusCode != 200) throw BackendException(_errorMessage(res), res.statusCode);
+    return ResidentsSyncStatus.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
+  Future<void> clearAllResidents(int deviceId) async {
+    final res = await _postWithRetry('devices/$deviceId/residents/clear', body: {});
+    if (res.statusCode != 200 && res.statusCode != 201) throw BackendException(_errorMessage(res), res.statusCode);
   }
 
   // --- Device CRUD ---
@@ -574,6 +801,40 @@ class DeviceEventDto {
       );
 }
 
+/// Event from GET /events (recent events for dashboard).
+class RecentEventDto {
+  final int id;
+  final int? deviceId;
+  final String eventType;
+  final Map<String, dynamic>? data;
+  final String? snapshotUrl;
+  final List<String>? readBy;
+  final String createdAt;
+
+  RecentEventDto({
+    required this.id,
+    this.deviceId,
+    required this.eventType,
+    this.data,
+    this.snapshotUrl,
+    this.readBy,
+    required this.createdAt,
+  });
+
+  factory RecentEventDto.fromJson(Map<String, dynamic> json) {
+    final readBy = json['readBy'];
+    return RecentEventDto(
+      id: json['id'] as int? ?? 0,
+      deviceId: json['deviceId'] as int?,
+      eventType: json['eventType'] as String? ?? '',
+      data: json['data'] as Map<String, dynamic>?,
+      snapshotUrl: json['snapshotUrl'] as String?,
+      readBy: readBy is List ? readBy.map((e) => e.toString()).toList() : null,
+      createdAt: json['createdAt'] as String? ?? '',
+    );
+  }
+}
+
 class TestConnectionResult {
   final bool reachable;
   final Map<String, dynamic>? info;
@@ -623,5 +884,113 @@ class MyApartmentDto {
         apartmentId: json['apartmentId'] as int,
         apartment: ApartmentDto.fromJson(json['apartment'] as Map<String, dynamic>),
         building: BuildingDto.fromJson(json['building'] as Map<String, dynamic>),
+      );
+}
+
+// --- Panel residents (Akuvox) ---
+
+class PanelResident {
+  final String id;
+  final String panelUserId;
+  final String name;
+  final int? apartmentId;
+  final String? webRelay;
+  final String? liftFloorNum;
+  final String syncStatus;
+  final String? syncError;
+  final String? syncedAt;
+  final String? createdAt;
+  final String? updatedAt;
+
+  PanelResident({
+    required this.id,
+    required this.panelUserId,
+    required this.name,
+    this.apartmentId,
+    this.webRelay,
+    this.liftFloorNum,
+    required this.syncStatus,
+    this.syncError,
+    this.syncedAt,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  factory PanelResident.fromJson(Map<String, dynamic> json) => PanelResident(
+        id: json['id'] as String? ?? '',
+        panelUserId: json['panelUserId'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        apartmentId: json['apartmentId'] as int?,
+        webRelay: json['webRelay'] as String?,
+        liftFloorNum: json['liftFloorNum'] as String?,
+        syncStatus: json['syncStatus'] as String? ?? 'synced',
+        syncError: json['syncError'] as String?,
+        syncedAt: json['syncedAt'] as String?,
+        createdAt: json['createdAt'] as String?,
+        updatedAt: json['updatedAt'] as String?,
+      );
+}
+
+class PanelResidentsResponse {
+  final List<PanelResident> items;
+  final int total;
+  final int page;
+  final int limit;
+
+  PanelResidentsResponse({required this.items, required this.total, required this.page, required this.limit});
+
+  factory PanelResidentsResponse.fromJson(Map<String, dynamic> json) {
+    final list = json['items'] as List<dynamic>? ?? [];
+    return PanelResidentsResponse(
+      items: list.map((e) => PanelResident.fromJson(e as Map<String, dynamic>)).toList(),
+      total: json['total'] as int? ?? 0,
+      page: json['page'] as int? ?? 1,
+      limit: json['limit'] as int? ?? 50,
+    );
+  }
+}
+
+class CreatePanelResidentDto {
+  final String panelUserId;
+  final String name;
+  final int? apartmentId;
+  final String? webRelay;
+  final String? liftFloorNum;
+  final Map<String, dynamic>? scheduleRelay;
+
+  CreatePanelResidentDto({
+    required this.panelUserId,
+    required this.name,
+    this.apartmentId,
+    this.webRelay,
+    this.liftFloorNum,
+    this.scheduleRelay,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'panelUserId': panelUserId,
+        'name': name,
+        if (apartmentId != null) 'apartmentId': apartmentId,
+        if (webRelay != null) 'webRelay': webRelay,
+        if (liftFloorNum != null) 'liftFloorNum': liftFloorNum,
+        if (scheduleRelay != null) 'scheduleRelay': scheduleRelay,
+      };
+}
+
+class ResidentsSyncStatus {
+  final int total;
+  final int synced;
+  final int pending;
+  final int errors;
+  final String? lastSyncedAt;
+
+  ResidentsSyncStatus({required this.total, required this.synced, required this.pending, required this.errors, this.lastSyncedAt});
+
+  factory ResidentsSyncStatus.fromJson(Map<String, dynamic> json) => ResidentsSyncStatus(
+        total: json['total'] as int? ?? 0,
+        synced: json['synced'] as int? ?? 0,
+        pending: json['pending'] as int? ?? 0,
+        errors: json['errors'] as int? ?? 0,
+        lastSyncedAt: json['lastSyncedAt'] as String?,
       );
 }
