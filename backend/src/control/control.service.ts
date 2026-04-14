@@ -11,8 +11,12 @@ import { UniviewWsConnectionService } from '../events/uniview-ws-connection.serv
 import { EventLogService } from '../events/event-log.service';
 import { IncomingCallService } from '../events/incoming-call.service';
 import { AccessService } from '../access/access.service';
+import { PushService } from '../push/push.service';
 import { RequestUser } from '../auth/request-user.interface';
 import { DeviceEventDto } from './dto/device-event.dto';
+import { RecordingsQueryDto } from './dto/recordings-query.dto';
+import { PtzMoveDto } from './dto/ptz-move.dto';
+import { PtzPresetDto } from './dto/ptz-preset.dto';
 
 @Injectable()
 export class ControlService {
@@ -26,6 +30,7 @@ export class ControlService {
     private readonly accessService: AccessService,
     private readonly eventLogService: EventLogService,
     private readonly incomingCallService: IncomingCallService,
+    private readonly pushService: PushService,
   ) {}
 
   async openDoor(deviceId: number, dto: OpenDoorDto, user: RequestUser) {
@@ -195,7 +200,19 @@ export class ControlService {
       if (dto.deviceId) await this.devicesService.updateStatus(dto.deviceId, 'online');
       return { reachable: true, info };
     } catch (e) {
-      if (dto.deviceId) await this.devicesService.updateStatus(dto.deviceId, 'offline').catch(() => {});
+      if (dto.deviceId) {
+        await this.devicesService.updateStatus(dto.deviceId, 'offline').catch(() => {});
+        try {
+          const device = await this.devicesService.findById(dto.deviceId);
+          const userIds = await this.accessService.getUserIdsWithAccessToBuilding(device.buildingId);
+          await this.pushService.sendDeviceOfflinePush(userIds, {
+            deviceId: device.id,
+            deviceName: device.name,
+          });
+        } catch (pushErr) {
+          this.logger.warn(`Device offline push failed: ${(pushErr as Error).message}`);
+        }
+      }
       return { reachable: false, error: (e as Error).message };
     }
   }
@@ -214,6 +231,192 @@ export class ControlService {
       apartmentNumber: dto.apartmentNumber,
       snapshotUrl: dto.snapshotUrl,
     });
+  }
+
+  // ————— Akuvox proxy (device type must be AKUVOX) —————
+
+  async dial(deviceId: number, user: RequestUser) {
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
+    const result = await this.akuvoxClient.dial(device);
+    this.eventLogService.create(deviceId, 'dial', { userId: user.id, success: result.success }, { userId: user.id }).catch(() => {});
+    return result;
+  }
+
+  async hangup(deviceId: number, user: RequestUser) {
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
+    return this.akuvoxClient.hangup(device);
+  }
+
+  async getRelayList(deviceId: number, user: RequestUser) {
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
+    return this.akuvoxClient.getRelayList(device);
+  }
+
+  async relayTrig(deviceId: number, relayId: number, user: RequestUser) {
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
+    return this.akuvoxClient.relayTrig(device, relayId);
+  }
+
+  async getCallLog(deviceId: number, user: RequestUser) {
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
+    return this.akuvoxClient.getCallLog(device);
+  }
+
+  async getUserList(deviceId: number, user: RequestUser) {
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
+    return this.akuvoxClient.getUserList(device);
+  }
+
+  async addUser(
+    deviceId: number,
+    items: Array<{ Name: string; UserID: string; LiftFloorNum?: number; WebRelay?: number; 'Schedule-Relay'?: string }>,
+    user: RequestUser,
+  ) {
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
+    const result = await this.akuvoxClient.addUser(device, items);
+    this.eventLogService.create(deviceId, 'user_add', { userId: user.id, count: items.length, success: result.success }, { userId: user.id }).catch(() => {});
+    return result;
+  }
+
+  async getContacts(deviceId: number, user: RequestUser) {
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
+    return this.akuvoxClient.getContacts(device);
+  }
+
+  /** Akuvox: system/status + sip/status for online/SIP indicator. */
+  async getAkuvoxStatus(deviceId: number, user: RequestUser) {
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
+    const [systemStatus, sipStatus] = await Promise.all([
+      this.akuvoxClient.getSystemStatus(device).catch(() => ({})),
+      this.akuvoxClient.getSipStatus(device).catch(() => ({})),
+    ]);
+    return { system: systemStatus, sip: sipStatus };
+  }
+
+  // ————— Uniview proxy (device type UNIVIEW_IPC | UNIVIEW_NVR) —————
+
+  async getChannels(deviceId: number, user: RequestUser) {
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    if (device.type !== DeviceType.UNIVIEW_IPC && device.type !== DeviceType.UNIVIEW_NVR) {
+      throw new BadRequestException('Устройство не является Uniview NVR/IPC');
+    }
+    const [channels, details] = await Promise.all([
+      this.univiewClient.getChannels(device).catch(() => []),
+      this.univiewClient.getChannelDetail(device).catch(() => []),
+    ]);
+    return { channels, details };
+  }
+
+  async getSnapshot(deviceId: number, channelId: number, streamId: number | undefined, user: RequestUser): Promise<Buffer> {
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    if (device.type !== DeviceType.UNIVIEW_IPC && device.type !== DeviceType.UNIVIEW_NVR) {
+      throw new BadRequestException('Устройство не является Uniview NVR/IPC');
+    }
+    return this.univiewClient.getSnapshot(device, channelId, streamId ?? 0);
+  }
+
+  // ─── Uniview Recording / Playback ───
+
+  async getRecordings(deviceId: number, query: RecordingsQueryDto, user: RequestUser) {
+    const device = await this.devicesService.findByIdForUser(deviceId, user);
+    if (device.type !== DeviceType.UNIVIEW_IPC && device.type !== DeviceType.UNIVIEW_NVR) {
+      throw new BadRequestException('Recordings are only supported for Uniview devices');
+    }
+    const channelId = query.channelId ?? device.defaultChannel ?? 1;
+    return this.univiewClient.getRecordings(device, channelId, query.from, query.to);
+  }
+
+  async getPlaybackUrl(deviceId: number, query: RecordingsQueryDto, user: RequestUser) {
+    const device = await this.devicesService.findByIdForUser(deviceId, user);
+    if (device.type !== DeviceType.UNIVIEW_IPC && device.type !== DeviceType.UNIVIEW_NVR) {
+      throw new BadRequestException('Playback is only supported for Uniview devices');
+    }
+    const channelId = query.channelId ?? device.defaultChannel ?? 1;
+    if (!query.from || !query.to) {
+      throw new BadRequestException('from and to parameters are required for playback URL');
+    }
+    const url = await this.univiewClient.getPlaybackUrl(device, channelId, query.from, query.to);
+    return { url };
+  }
+
+  async getRecordingTimeline(deviceId: number, query: RecordingsQueryDto, user: RequestUser) {
+    const device = await this.devicesService.findByIdForUser(deviceId, user);
+    if (device.type !== DeviceType.UNIVIEW_IPC && device.type !== DeviceType.UNIVIEW_NVR) {
+      throw new BadRequestException('Recording timeline is only supported for Uniview devices');
+    }
+    const channelId = query.channelId ?? device.defaultChannel ?? 1;
+    const date = query.date ?? new Date().toISOString().split('T')[0];
+    return this.univiewClient.getRecordingTimeline(device, channelId, date);
+  }
+
+  // ─── Uniview PTZ ───
+
+  async getPtzCapabilities(deviceId: number, channelId: number | undefined, user: RequestUser) {
+    const device = await this.devicesService.findByIdForUser(deviceId, user);
+    if (device.type !== DeviceType.UNIVIEW_IPC && device.type !== DeviceType.UNIVIEW_NVR) {
+      return { Supported: false };
+    }
+    const ch = channelId ?? device.defaultChannel ?? 1;
+    return this.univiewClient.getPtzCapabilities(device, ch);
+  }
+
+  async ptzMove(deviceId: number, dto: PtzMoveDto, user: RequestUser) {
+    const device = await this.devicesService.findByIdForUser(deviceId, user);
+    if (device.type !== DeviceType.UNIVIEW_IPC && device.type !== DeviceType.UNIVIEW_NVR) {
+      throw new BadRequestException('PTZ is only supported for Uniview devices');
+    }
+    const ch = dto.channelId ?? device.defaultChannel ?? 1;
+    await this.univiewClient.ptzMove(device, ch, dto.direction, dto.speed ?? 50);
+    return { success: true };
+  }
+
+  async ptzStop(deviceId: number, channelId: number | undefined, user: RequestUser) {
+    const device = await this.devicesService.findByIdForUser(deviceId, user);
+    if (device.type !== DeviceType.UNIVIEW_IPC && device.type !== DeviceType.UNIVIEW_NVR) {
+      throw new BadRequestException('PTZ is only supported for Uniview devices');
+    }
+    const ch = channelId ?? device.defaultChannel ?? 1;
+    await this.univiewClient.ptzStop(device, ch);
+    return { success: true };
+  }
+
+  async getPtzPresets(deviceId: number, channelId: number | undefined, user: RequestUser) {
+    const device = await this.devicesService.findByIdForUser(deviceId, user);
+    if (device.type !== DeviceType.UNIVIEW_IPC && device.type !== DeviceType.UNIVIEW_NVR) {
+      return [];
+    }
+    const ch = channelId ?? device.defaultChannel ?? 1;
+    return this.univiewClient.getPtzPresets(device, ch);
+  }
+
+  async gotoPreset(deviceId: number, dto: PtzPresetDto, user: RequestUser) {
+    const device = await this.devicesService.findByIdForUser(deviceId, user);
+    if (device.type !== DeviceType.UNIVIEW_IPC && device.type !== DeviceType.UNIVIEW_NVR) {
+      throw new BadRequestException('PTZ is only supported for Uniview devices');
+    }
+    const ch = dto.channelId ?? device.defaultChannel ?? 1;
+    await this.univiewClient.gotoPreset(device, ch, dto.presetId);
+    return { success: true };
   }
 }
 
