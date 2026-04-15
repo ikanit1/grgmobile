@@ -3,6 +3,7 @@ import 'package:video_player/video_player.dart'
     show VideoFormat, VideoPlayer, VideoPlayerController;
 
 import '../api/backend_client.dart';
+import '../models/live_url_dto.dart';
 import '../theme/app_theme.dart';
 
 class DoorControlBackendScreen extends StatefulWidget {
@@ -38,9 +39,9 @@ class _DoorControlBackendScreenState extends State<DoorControlBackendScreen> {
 
   Future<void> _loadLiveUrl() async {
     try {
-      final url = await widget.client.getLiveUrl(widget.deviceId);
+      final LiveUrlDto dto = await widget.client.getLiveUrl(widget.deviceId);
       if (!mounted) return;
-      final trimmed = url.trim();
+      final trimmed = dto.rtspUrl.trim();
       if (trimmed.isEmpty ||
           (!trimmed.toLowerCase().startsWith('rtsp://') &&
               !trimmed.toLowerCase().startsWith('http://') &&

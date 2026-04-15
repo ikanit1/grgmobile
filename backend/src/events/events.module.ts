@@ -9,11 +9,13 @@ import { Device } from '../devices/entities/device.entity';
 import { Apartment } from '../apartments/entities/apartment.entity';
 import { UserApartment } from '../users/entities/user-apartment.entity';
 import { PushModule } from '../push/push.module';
+import { AccessModule } from '../access/access.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([EventLog, Device, Apartment, UserApartment]),
     forwardRef(() => PushModule),
+    AccessModule,
   ],
   providers: [EventsGateway, UniviewWsConnectionService, EventLogService, IncomingCallService],
   exports: [EventsGateway, UniviewWsConnectionService, EventLogService, IncomingCallService],

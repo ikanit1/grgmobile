@@ -10,6 +10,7 @@ import { UserRole } from '../users/entities/user.entity';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 import { SyncConfigDto } from './dto/sync-config.dto';
 import { EVENT_TYPE_DEVICE_UPDATED, EVENT_TYPE_DEVICE_DELETED } from '../events/event-types';
+import { sanitizeLogData } from '../common/logging/sanitizer';
 
 @UseGuards(JwtAuthGuard)
 @Controller('devices')
@@ -53,7 +54,9 @@ export class DevicesController {
     @Req() req: { user: RequestUser },
   ) {
     const device = await this.devicesService.update(Number(id), dto, req.user);
-    this.eventLogService.create(Number(id), EVENT_TYPE_DEVICE_UPDATED, { ...dto } as Record<string, unknown>, {
+    // Sanitize dto before logging to event_log (remove sensitive fields)
+    const logData = sanitizeLogData({ ...dto });
+    this.eventLogService.create(Number(id), EVENT_TYPE_DEVICE_UPDATED, logData as Record<string, unknown>, {
       userId: req.user.id,
       organizationId: req.user.organizationId ?? null,
       entityType: 'device',

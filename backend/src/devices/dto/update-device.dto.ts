@@ -1,5 +1,6 @@
 import { IsEnum, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 import { DeviceRole, DeviceType } from '../entities/device.entity';
+import { IsValidHost } from '../../common/validators/is-valid-host.validator';
 
 export class UpdateDeviceDto {
   @IsOptional()
@@ -8,6 +9,7 @@ export class UpdateDeviceDto {
 
   @IsOptional()
   @IsString()
+  @IsValidHost()
   host?: string;
 
   @IsOptional()

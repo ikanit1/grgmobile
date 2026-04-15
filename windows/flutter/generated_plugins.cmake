@@ -3,8 +3,11 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  connectivity_plus
   firebase_core
   flutter_secure_storage_windows
+  media_kit_video
+  volume_controller
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

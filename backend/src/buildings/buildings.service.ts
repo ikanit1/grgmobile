@@ -18,6 +18,7 @@ import {
   EVENT_TYPE_BUILDING_DELETED,
   EVENT_TYPE_DEVICE_ADDED,
 } from '../events/event-types';
+import { CredentialsService } from '../credentials/credentials.service';
 
 const DEVICES_CACHE_TTL = 30_000; // 30 seconds
 
@@ -35,6 +36,7 @@ export class BuildingsService {
     private readonly accessService: AccessService,
     private readonly eventLogService: EventLogService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly credentialsService: CredentialsService,
   ) {}
 
   /**
@@ -195,15 +197,24 @@ export class BuildingsService {
         }
       }
     }
+    // Encrypt credentials if provided
+    let credentials: Record<string, string> | undefined = undefined;
+    if (dto.username || dto.password) {
+      credentials = this.credentialsService.encrypt({
+        username: dto.username ?? '',
+        password: dto.password ?? '',
+      });
+    }
+
     const dev = this.devicesRepo.create({
       buildingId,
-      building,
       name: dto.name,
       host: dto.host,
       type: dto.type,
       role: dto.role,
-      username: dto.username,
-      password: dto.password,
+      username: credentials ? undefined : dto.username, // undefined if credentials used
+      password: credentials ? undefined : dto.password,
+      credentials,
       httpPort: dto.httpPort ?? 80,
       rtspPort: dto.rtspPort ?? 554,
       sipPort: dto.sipPort,
@@ -211,7 +222,7 @@ export class BuildingsService {
       defaultStream: dto.defaultStream,
       macAddress: dto.macAddress,
     });
-    const saved = await this.devicesRepo.save(dev);
+    const saved = await this.devicesRepo.save(dev) as Device;
     this.eventLogService.create(null, EVENT_TYPE_DEVICE_ADDED, { name: dto.name, host: dto.host, type: dto.type }, {
       userId: user.id,
       organizationId: building.complex?.organizationId ?? null,

@@ -16,7 +16,7 @@ import { EventsModule } from '../events/events.module';
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'dev-secret',
       signOptions: {
-        expiresIn: (process.env.JWT_EXPIRES || '30d') as number | ms.StringValue,
+        expiresIn: (process.env.JWT_EXPIRES || '15m') as number | ms.StringValue,
       },
     }),
   ],

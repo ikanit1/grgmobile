@@ -134,7 +134,12 @@ export class UsersService {
   }
 
   async setRefreshTokenHash(userId: string, hash: string | null): Promise<void> {
-    await this.usersRepo.update(userId, { refreshTokenHash: hash ?? undefined });
+    await this.usersRepo
+      .createQueryBuilder()
+      .update()
+      .set({ refreshTokenHash: hash as unknown as string })
+      .where('id = :id', { id: userId })
+      .execute();
   }
 
   async findByRefreshTokenHash(hash: string): Promise<User | null> {

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as express from 'express';
 import { config } from 'dotenv';
 
 config();
@@ -20,13 +21,22 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
 async function bootstrap() {
   if (process.env.NODE_ENV === 'production') {
-    if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'dev-secret') {
-      // eslint-disable-next-line no-console
-      console.warn('⚠  ВНИМАНИЕ: JWT_SECRET не задан или используется значение по умолчанию! Задайте безопасный секрет в .env');
-    }
-    if (!process.env.CREDENTIALS_KEY || process.env.CREDENTIALS_KEY === 'dev-default-key-change-in-production') {
-      // eslint-disable-next-line no-console
-      console.warn('⚠  ВНИМАНИЕ: CREDENTIALS_KEY не задан или используется значение по умолчанию!');
+    // Проверяем обязательные секреты и конфигурацию
+    const requiredSecrets = [
+      { env: 'JWT_SECRET', forbidden: 'dev-secret', name: 'JWT Secret' },
+      { env: 'CREDENTIALS_ENCRYPTION_KEY', forbidden: 'dev-default-key-change-in-production', name: 'Credentials Encryption Key' },
+      { env: 'WEBHOOK_SECRET', forbidden: 'your-webhook-secret', name: 'Webhook Secret' },
+      { env: 'DB_PASSWORD', forbidden: 'postgres', name: 'Database Password' },
+      { env: 'CORS_ORIGINS', forbidden: undefined, name: 'CORS Origins' },
+      { env: 'WS_ALLOWED_ORIGINS', forbidden: undefined, name: 'WebSocket Allowed Origins' },
+    ];
+
+    for (const { env, forbidden, name } of requiredSecrets) {
+      const value = process.env[env];
+      if (!value || value?.trim() === '' || (forbidden && value === forbidden)) {
+        console.error(`❌ ОШИБКА: ${name} (${env}) должен быть задан и отличаться от значения по умолчанию в production`);
+        process.exit(1);
+      }
     }
   }
 
@@ -39,7 +49,21 @@ async function bootstrap() {
     }),
   );
   app.useGlobalFilters(new AllExceptionsFilter());
-  app.enableCors();
+  // CORS configuration - restrict origins in production, allow localhost in dev
+  const isProd = process.env.NODE_ENV === 'production';
+  const envCorsOrigins = process.env.CORS_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean);
+  const corsOrigins = envCorsOrigins && envCorsOrigins.length > 0
+    ? envCorsOrigins
+    : (isProd ? [] : ['http://localhost:8100', 'http://localhost:3000']);
+  console.log(`[CORS] Allowed origins:`, corsOrigins);
+  app.enableCors({
+    origin: corsOrigins,
+    credentials: true,
+  });
+
+  // Ограничение размера тела запроса для защиты от DoS
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Doorphone API')

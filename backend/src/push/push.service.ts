@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { readFileSync } from 'fs';
 import { UsersService } from '../users/users.service';
 import * as admin from 'firebase-admin';
+import { safeLog } from '../common/logging/sanitizer';
 
 export interface IncomingCallPayload {
   apartmentNumber: string;
@@ -62,7 +63,7 @@ export class PushService {
     if (tokens.length === 0) {
       // eslint-disable-next-line no-console
       console.log(
-        `[PushService] sendIncomingCallPush -> userIds=${userIds.join(',')} (no push tokens) payload=${JSON.stringify(payload)}`,
+        `[PushService] sendIncomingCallPush -> userIds=${userIds.join(',')} (no push tokens) payload=${safeLog(payload)}`,
       );
       return;
     }
@@ -101,8 +102,96 @@ export class PushService {
     } else {
       // eslint-disable-next-line no-console
       console.log(
-        `[PushService] sendIncomingCallPush (no FCM) -> userIds=${userIds.join(',')} payload=${JSON.stringify(payload)}`,
+        `[PushService] sendIncomingCallPush (no FCM) -> userIds=${userIds.join(',')} payload=${safeLog(payload)}`,
       );
+    }
+  }
+
+  /** type: "motion" — motion detection on camera (TZ 2.6). */
+  async sendMotionPush(
+    userIds: string[],
+    payload: { deviceId: number; channelId?: number; snapshotUrl?: string; timestamp?: string },
+  ): Promise<void> {
+    if (userIds.length === 0) return;
+    const allowed = await this.usersService.filterDoNotDisturb(userIds);
+    const tokens = await this.usersService.getPushTokens(allowed);
+    if (tokens.length === 0) return;
+    const message: admin.messaging.MulticastMessage = {
+      tokens: tokens.map((t) => t.token),
+      notification: { title: 'Движение на камере', body: 'Зафиксировано движение' },
+      data: {
+        type: 'motion',
+        deviceId: String(payload.deviceId),
+        ...(payload.channelId != null && { channelId: String(payload.channelId) }),
+        ...(payload.snapshotUrl && { snapshotUrl: payload.snapshotUrl }),
+        ...(payload.timestamp && { timestamp: payload.timestamp }),
+      },
+      android: { priority: 'high' },
+    };
+    if (this.fcmInitialized) {
+      try {
+        await admin.messaging().sendEachForMulticast(message);
+      } catch (e) {
+        console.error('[PushService] sendMotionPush error:', (e as Error).message);
+      }
+    }
+  }
+
+  /** type: "io_alarm" — IO alarm / sensor (TZ 2.6). */
+  async sendIoAlarmPush(
+    userIds: string[],
+    payload: { deviceId: number; inputId?: number | string },
+  ): Promise<void> {
+    if (userIds.length === 0) return;
+    const allowed = await this.usersService.filterDoNotDisturb(userIds);
+    const tokens = await this.usersService.getPushTokens(allowed);
+    if (tokens.length === 0) return;
+    const message: admin.messaging.MulticastMessage = {
+      tokens: tokens.map((t) => t.token),
+      notification: { title: 'Тревога', body: 'Сработал датчик' },
+      data: {
+        type: 'io_alarm',
+        deviceId: String(payload.deviceId),
+        ...(payload.inputId != null && { inputId: String(payload.inputId) }),
+      },
+      android: { priority: 'high' },
+    };
+    if (this.fcmInitialized) {
+      try {
+        await admin.messaging().sendEachForMulticast(message);
+      } catch (e) {
+        console.error('[PushService] sendIoAlarmPush error:', (e as Error).message);
+      }
+    }
+  }
+
+  /** type: "device_offline" — device went offline (TZ 2.6). */
+  async sendDeviceOfflinePush(
+    userIds: string[],
+    payload: { deviceId: number; deviceName?: string },
+  ): Promise<void> {
+    if (userIds.length === 0) return;
+    const allowed = await this.usersService.filterDoNotDisturb(userIds);
+    const tokens = await this.usersService.getPushTokens(allowed);
+    if (tokens.length === 0) return;
+    const message: admin.messaging.MulticastMessage = {
+      tokens: tokens.map((t) => t.token),
+      notification: {
+        title: 'Устройство недоступно',
+        body: payload.deviceName ? `Устройство «${payload.deviceName}» офлайн` : 'Устройство офлайн',
+      },
+      data: {
+        type: 'device_offline',
+        deviceId: String(payload.deviceId),
+        ...(payload.deviceName && { deviceName: payload.deviceName }),
+      },
+    };
+    if (this.fcmInitialized) {
+      try {
+        await admin.messaging().sendEachForMulticast(message);
+      } catch (e) {
+        console.error('[PushService] sendDeviceOfflinePush error:', (e as Error).message);
+      }
     }
   }
 }

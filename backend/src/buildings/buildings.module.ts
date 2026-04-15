@@ -10,6 +10,7 @@ import { AccessModule } from '../access/access.module';
 import { ApartmentsModule } from '../apartments/apartments.module';
 import { EventsModule } from '../events/events.module';
 import { DevicesModule } from '../devices/devices.module';
+import { CredentialsModule } from '../credentials/credentials.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { DevicesModule } from '../devices/devices.module';
     ApartmentsModule,
     EventsModule,
     forwardRef(() => DevicesModule),
+    CredentialsModule,
   ],
   controllers: [BuildingsController],
   providers: [BuildingsService],

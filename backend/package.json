@@ -7,6 +7,7 @@
     "start": "node dist/main.js",
     "start:dev": "ts-node -r tsconfig-paths/register src/main.ts",
     "build": "tsc -p tsconfig.json",
+    "test": "jest --config jest.json",
     "test:e2e": "jest --config jest-e2e.json --runInBand",
     "db:reset": "node scripts/reset-database.js",
     "db:super-admin": "node scripts/make-super-admin.js"
@@ -21,7 +22,6 @@
     "@nestjs/platform-express": "^11.0.3",
     "@nestjs/platform-socket.io": "^11.1.14",
     "@nestjs/swagger": "^11.2.6",
-    "@nestjs/typeorm": "^11.0.0",
     "@nestjs/websockets": "^11.0.0",
     "axios": "^1.13.6",
     "bcrypt": "^6.0.0",
@@ -38,12 +38,12 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.1",
-    "typeorm": "^0.3.20",
     "ws": "^8.18.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@nestjs/testing": "^11.1.14",
+    "@nestjs/typeorm": "^11.0.0",
     "@types/bcrypt": "^6.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.10.7",
@@ -55,6 +55,7 @@
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "typeorm": "^0.3.28",
     "typescript": "^5.7.3"
   }
 }

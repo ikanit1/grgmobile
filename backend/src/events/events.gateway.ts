@@ -9,7 +9,19 @@ import {
 import { Server, Socket } from 'socket.io';
 import * as jwt from 'jsonwebtoken';
 
-@WebSocketGateway({ path: '/api/ws/events', cors: true })
+@WebSocketGateway({
+  path: '/api/ws/events',
+  cors: {
+    // In production, require explicit WS_ALLOWED_ORIGINS. In dev, default to localhost.
+    origin: (() => {
+      const isProd = process.env.NODE_ENV === 'production';
+      const envOrigins = process.env.WS_ALLOWED_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean);
+      if (envOrigins && envOrigins.length > 0) return envOrigins;
+      return isProd ? [] : ['http://localhost:8100', 'http://localhost:3000'];
+    })(),
+    credentials: true,
+  },
+})
 export class EventsGateway implements OnGatewayConnection {
   @WebSocketServer()
   server: Server;
@@ -55,5 +67,12 @@ export class EventsGateway implements OnGatewayConnection {
 
   emitToHouse(houseId: number, payload: any) {
     this.server.to(`house:${houseId}`).emit('event', payload);
+  }
+
+  /** Notify clients when device goes online/offline (TZ: device:status_change). */
+  emitDeviceStatusChange(deviceId: number, buildingId: number, status: 'online' | 'offline') {
+    const payload = { type: 'device:status_change', deviceId, buildingId, status };
+    this.server.to(`device:${deviceId}`).emit('device:status_change', payload);
+    this.server.to(`house:${buildingId}`).emit('device:status_change', payload);
   }
 }

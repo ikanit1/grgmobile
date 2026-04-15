@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { EventLog } from './entities/event-log.entity';
 
 export interface AuditMeta {
@@ -8,6 +8,7 @@ export interface AuditMeta {
   organizationId?: string | null;
   entityType?: string | null;
   entityId?: string | null;
+  snapshotUrl?: string | null;
 }
 
 @Injectable()
@@ -31,6 +32,7 @@ export class EventLogService {
       organizationId: meta?.organizationId ?? null,
       entityType: meta?.entityType ?? null,
       entityId: meta?.entityId ?? null,
+      snapshotUrl: meta?.snapshotUrl ?? null,
     });
     return this.eventLogRepo.save(log);
   }
@@ -62,6 +64,30 @@ export class EventLogService {
     const limit = Math.min(options?.limit ?? 50, 200);
     qb.take(limit);
     return qb.getMany();
+  }
+
+  /** Recent events for given device IDs (for dashboard "last N events"). */
+  async findRecentByDeviceIds(deviceIds: number[], limit: number): Promise<EventLog[]> {
+    if (deviceIds.length === 0) return [];
+    const qb = this.eventLogRepo
+      .createQueryBuilder('e')
+      .where('e.deviceId IN (:...ids)', { ids: deviceIds })
+      .orderBy('e.createdAt', 'DESC')
+      .take(Math.min(limit, 100));
+    return qb.getMany();
+  }
+
+  /** Count events not read by the user (read_by is null or does not contain userId). */
+  async countUnreadByDeviceIds(deviceIds: number[], userId: string): Promise<number> {
+    if (deviceIds.length === 0) return 0;
+    const list = await this.eventLogRepo.find({
+      where: { deviceId: In(deviceIds) },
+      select: ['id', 'readBy'],
+    });
+    return list.filter((e) => {
+      const readBy = e.readBy as string[] | null | undefined;
+      return !readBy || !readBy.includes(userId);
+    }).length;
   }
 
   /** Find audit events for a specific organisation (for monitoring / NOC dashboard). */

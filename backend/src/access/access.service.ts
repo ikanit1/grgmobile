@@ -116,6 +116,19 @@ export class AccessService {
     await this.assertCanAccessOrganization(user, organizationId);
   }
 
+  /** User IDs that have access to the given building (residents with apartments in this building). For push targeting. */
+  async getUserIdsWithAccessToBuilding(buildingId: number): Promise<string[]> {
+    const now = new Date();
+    const rows = await this.userApartmentsRepo
+      .createQueryBuilder('ua')
+      .innerJoin('ua.apartment', 'apt')
+      .where('apt.building_id = :buildingId', { buildingId })
+      .andWhere('(ua.valid_until IS NULL OR ua.valid_until >= :now)', { now })
+      .select('DISTINCT ua.user_id', 'userId')
+      .getRawMany();
+    return (rows as { userId: string }[]).map((r) => r.userId);
+  }
+
   /** Building IDs where this resident has apartments. */
   async getBuildingIdsForResident(userId: string): Promise<number[]> {
     const uas = await this.userApartmentsRepo.find({

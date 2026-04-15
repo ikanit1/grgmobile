@@ -45,6 +45,14 @@ export class EventLog {
   @Column({ type: 'simple-json', nullable: true })
   data?: Record<string, unknown>;
 
+  /** URL snapshot from camera at event time (for events with thumbnail). */
+  @Column({ name: 'snapshot_url', type: 'varchar', length: 1024, nullable: true })
+  snapshotUrl?: string | null;
+
+  /** User IDs who marked this event as read (for unread badge). */
+  @Column({ name: 'read_by', type: 'simple-json', nullable: true })
+  readBy?: string[] | null;
+
   @Column({ name: 'created_at', default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;
 }

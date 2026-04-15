@@ -4,6 +4,7 @@ import '../api/auth_storage.dart';
 import '../api/backend_client.dart';
 import '../models/api_config.dart';
 import '../models/auth_user.dart';
+import '../services/events_socket_service.dart';
 import '../services/push_token_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/animated_background.dart';
@@ -66,6 +67,7 @@ class _AppRootState extends State<AppRoot> {
         _authCheckDone = true;
       });
       sendPushTokenToBackend(_backendClient!);
+      _connectWebSocket();
     }
   }
 
@@ -73,10 +75,19 @@ class _AppRootState extends State<AppRoot> {
     setState(() => _authUser = user);
     if (_backendClient != null) {
       sendPushTokenToBackend(_backendClient!);
+      _connectWebSocket();
     }
   }
 
+  Future<void> _connectWebSocket() async {
+    if (_backendClient == null) return;
+    final token = await _backendClient!.getToken();
+    if (token == null) return;
+    EventsSocketService.instance.connect(_apiConfig.baseUrl, token);
+  }
+
   Future<void> _onLogout() async {
+    EventsSocketService.instance.disconnect();
     await _backendClient?.logout();
     setState(() => _authUser = null);
   }

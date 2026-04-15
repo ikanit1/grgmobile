@@ -1,11 +1,13 @@
 import { IsString, IsOptional, IsNumber, IsEnum, Min, Max } from 'class-validator';
 import { DeviceType, DeviceRole } from '../../devices/entities/device.entity';
+import { IsValidHost } from '../../common/validators/is-valid-host.validator';
 
 export class CreateDeviceDto {
   @IsString()
   name!: string;
 
   @IsString()
+  @IsValidHost()
   host!: string;
 
   @IsEnum(DeviceType)

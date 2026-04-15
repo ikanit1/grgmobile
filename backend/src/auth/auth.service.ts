@@ -56,6 +56,9 @@ export class AuthService {
       throw new UnauthorizedException('Учётная запись заблокирована');
     }
     const { accessToken, refreshToken } = await this.issueTokens(user);
+    if (dto.fcmToken) {
+      await this.usersService.updatePushToken(user.id, dto.fcmToken, dto.pushPlatform);
+    }
     this.eventLogService.create(null, EVENT_TYPE_USER_LOGIN, { login: dto.login }, {
       userId: user.id,
       organizationId: user.organizationId ?? null,
@@ -73,6 +76,11 @@ export class AuthService {
         complexId: user.complexId,
       },
     };
+  }
+
+  /** Invalidate refresh token for the user (logout). */
+  async logout(userId: string): Promise<void> {
+    await this.usersService.setRefreshTokenHash(userId, null);
   }
 
   async register(dto: RegisterDto) {

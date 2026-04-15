@@ -1,12 +1,15 @@
-import { Body, Controller, Headers, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, UseGuards, Headers, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { WebhooksService } from './webhooks.service';
 import { IntercomEventDto } from './dto/intercom-event.dto';
 import { AkuvoxWebhookDto } from './dto/akuvox-webhook.dto';
+import { UniviewWebhookDto } from './dto/uniview-webhook.dto';
+import { WebhookRateLimitGuard } from './webhooks-rate-limit.guard';
 
 /**
  * Публичные эндпоинты для приёма событий от панелей домофонов (без JWT).
  * Опционально: заголовок X-Webhook-Secret = WEBHOOK_SECRET из .env для проверки.
  */
+@UseGuards(WebhookRateLimitGuard)
 @Controller('webhooks')
 export class WebhooksController {
   constructor(private readonly webhooksService: WebhooksService) {}
@@ -28,5 +31,14 @@ export class WebhooksController {
     @Headers('x-webhook-secret') secret?: string,
   ) {
     return this.webhooksService.handleAkuvoxEvent(dto, secret);
+  }
+
+  @Post('uniview')
+  @HttpCode(HttpStatus.OK)
+  async univiewEvent(
+    @Body() dto: UniviewWebhookDto,
+    @Headers('x-webhook-secret') secret?: string,
+  ) {
+    return this.webhooksService.handleUniviewEvent(dto, secret);
   }
 }

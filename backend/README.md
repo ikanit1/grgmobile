@@ -163,3 +163,4 @@ backend/
 - [BACKEND.md](BACKEND.md) — полное описание API, БД, авторизации, устройств и протоколов.
 - [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) — роли, иерархия, сценарии подключения устройств.
 - [docs/FULL_SYSTEM_SPEC.md](docs/FULL_SYSTEM_SPEC.md) — спецификация системы, матрица доступов, сценарий входящего звонка.
+- [docs/SPEC_COMPLIANCE_AND_ROADMAP.md](docs/SPEC_COMPLIANCE_AND_ROADMAP.md) — соответствие полному ТЗ (Akuvox + Uniview, мультитенант, экраны), разрыв с текущей реализацией и поэтапный план реализации (MVP → Full) без смены стека (Flutter + NestJS).
