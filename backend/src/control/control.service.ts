@@ -12,6 +12,7 @@ import { EventLogService } from '../events/event-log.service';
 import { IncomingCallService } from '../events/incoming-call.service';
 import { AccessService } from '../access/access.service';
 import { PushService } from '../push/push.service';
+import { Go2rtcClient } from '../vendors/go2rtc/go2rtc.client';
 import { RequestUser } from '../auth/request-user.interface';
 import { DeviceEventDto } from './dto/device-event.dto';
 import { RecordingsQueryDto } from './dto/recordings-query.dto';
@@ -31,6 +32,7 @@ export class ControlService {
     private readonly eventLogService: EventLogService,
     private readonly incomingCallService: IncomingCallService,
     private readonly pushService: PushService,
+    private readonly go2rtcClient: Go2rtcClient,
   ) {}
 
   async openDoor(deviceId: number, dto: OpenDoorDto, user: RequestUser) {
@@ -63,15 +65,30 @@ export class ControlService {
     const device = await this.devicesService.findById(deviceId);
     await this.accessService.assertCanAccessDevice(user, device.buildingId);
 
+    let result: { protocol: string; url: string };
     switch (device.type) {
       case DeviceType.AKUVOX:
-        return this.akuvoxClient.getLiveUrl(device, query);
+        result = await this.akuvoxClient.getLiveUrl(device, query);
+        break;
       case DeviceType.UNIVIEW_IPC:
       case DeviceType.UNIVIEW_NVR:
-        return this.univiewClient.getLiveUrl(device, query);
+        result = await this.univiewClient.getLiveUrl(device, query);
+        break;
       default:
         throw new BadRequestException('Тип устройства не поддерживает получение видеопотока');
     }
+
+    // Register stream in go2rtc and return HLS URL for WAN access
+    let hlsUrl: string | undefined;
+    if (this.go2rtcClient.isConfigured && result.url) {
+      const channel = query.channel ?? device.defaultChannel ?? 1;
+      const streamType = query.stream ?? device.defaultStream ?? 'main';
+      const streamName = Go2rtcClient.streamName(deviceId, channel, streamType);
+      await this.go2rtcClient.ensureStream(streamName, result.url);
+      hlsUrl = this.go2rtcClient.getHlsUrl(streamName) ?? undefined;
+    }
+
+    return { ...result, hlsUrl };
   }
 
   async getDeviceInfo(deviceId: number, user: RequestUser): Promise<Record<string, unknown>> {
