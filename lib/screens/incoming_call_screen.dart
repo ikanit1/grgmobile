@@ -4,6 +4,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../api/backend_client.dart';
+import '../services/stream_quality_service.dart';
 import '../theme/app_theme.dart';
 import 'live_view_screen.dart';
 
@@ -45,7 +46,14 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
 
   Future<void> _loadPreview() async {
     try {
-      final url = await widget.client.getLiveUrl(widget.deviceId);
+      final pref = await StreamQualityService.instance.getPreference();
+      final liveUrl = await widget.client.getLiveUrl(
+        widget.deviceId,
+        stream: pref.streamType,
+      );
+      final url = (pref.preferHls && liveUrl.hlsUrl != null)
+          ? liveUrl.hlsUrl!
+          : liveUrl.rtspUrl;
       if (!mounted || url.trim().isEmpty) {
         setState(() => _loadingVideo = false);
         return;
