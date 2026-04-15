@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'screens/app_root.dart';
+import 'services/stream_quality_service.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+  StreamQualityService.instance.startListening();
   try {
     await Firebase.initializeApp();
   } catch (_) {
