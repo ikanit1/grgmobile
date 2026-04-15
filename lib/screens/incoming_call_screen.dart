@@ -1,11 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 
 import '../api/backend_client.dart';
 import '../theme/app_theme.dart';
+import 'live_view_screen.dart';
 
-/// Полноэкранный экран входящего звонка (по Push VOIP_CALL).
-/// Кнопки: Принять (видео), Сбросить, Открыть дверь.
 class IncomingCallScreen extends StatefulWidget {
   final int deviceId;
   final String? buildingName;
@@ -27,37 +28,37 @@ class IncomingCallScreen extends StatefulWidget {
 }
 
 class _IncomingCallScreenState extends State<IncomingCallScreen> {
-  String? _liveUrl;
-  VideoPlayerController? _videoController;
+  Player? _player;
+  VideoController? _videoController;
   bool _loadingVideo = true;
   bool _openDoorLoading = false;
+  Timer? _timeout;
 
   @override
   void initState() {
     super.initState();
-    _loadLiveUrl();
+    _loadPreview();
+    _timeout = Timer(const Duration(seconds: 60), () {
+      if (mounted) widget.onDismiss();
+    });
   }
 
-  Future<void> _loadLiveUrl() async {
+  Future<void> _loadPreview() async {
     try {
       final url = await widget.client.getLiveUrl(widget.deviceId);
-      if (!mounted) return;
-      if (url.isNotEmpty) {
-        setState(() => _liveUrl = url);
-        _videoController = VideoPlayerController.networkUrl(Uri.parse(url));
-        _videoController!.initialize().then((_) {
-          if (mounted) {
-            setState(() {
-              _loadingVideo = false;
-              _videoController?.play();
-            });
-          }
-        }).catchError((_) {
-          if (mounted) setState(() => _loadingVideo = false);
-        });
-      } else {
+      if (!mounted || url.trim().isEmpty) {
         setState(() => _loadingVideo = false);
+        return;
       }
+      _player = Player();
+      _videoController = VideoController(_player!);
+      _player!.stream.playing.listen((playing) {
+        if (mounted && playing && _loadingVideo) {
+          setState(() => _loadingVideo = false);
+        }
+      });
+      await _player!.open(Media(url.trim()), play: true);
+      _player!.setVolume(0); // muted preview
     } catch (_) {
       if (mounted) setState(() => _loadingVideo = false);
     }
@@ -65,7 +66,8 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
 
   @override
   void dispose() {
-    _videoController?.dispose();
+    _timeout?.cancel();
+    _player?.dispose();
     super.dispose();
   }
 
@@ -74,16 +76,13 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     try {
       final result = await widget.client.openDoor(widget.deviceId);
       if (!mounted) return;
-      if (result.success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Дверь открыта'), backgroundColor: Colors.green),
-        );
-        widget.onDismiss();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.message), backgroundColor: AppColors.danger),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.success ? 'Дверь открыта' : result.message),
+          backgroundColor: result.success ? Colors.green : AppColors.danger,
+        ),
+      );
+      if (result.success) widget.onDismiss();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -95,12 +94,24 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     }
   }
 
+  void _answer() {
+    widget.onDismiss();
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => LiveViewScreen(
+        client: widget.client,
+        deviceId: widget.deviceId,
+        deviceName: widget.buildingName ?? 'Домофон',
+      ),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final subtitle = [
       if (widget.buildingName != null && widget.buildingName!.isNotEmpty) widget.buildingName,
       if (widget.apartmentNumber != null && widget.apartmentNumber!.isNotEmpty) 'кв. ${widget.apartmentNumber}',
     ].join(' · ');
+
     return Material(
       color: Colors.black87,
       child: SafeArea(
@@ -116,58 +127,25 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Входящий звонок',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                        const Text('Входящий звонок',
+                          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
                         if (subtitle.isNotEmpty)
-                          Text(
-                            subtitle,
-                            style: const TextStyle(color: Colors.white70, fontSize: 14),
-                          ),
+                          Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 14)),
                       ],
                     ),
                   ),
                 ],
               ),
             ),
-            Expanded(
-              child: Center(
-                child: _buildVideoArea(subtitle),
-              ),
-            ),
+            Expanded(child: Center(child: _buildVideoArea())),
             Padding(
               padding: const EdgeInsets.all(24),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _actionButton(
-                    icon: Icons.call_end,
-                    label: 'Сбросить',
-                    color: AppColors.danger,
-                    onPressed: widget.onDismiss,
-                  ),
-                  _actionButton(
-                    icon: Icons.lock_open,
-                    label: _openDoorLoading ? '...' : 'Открыть дверь',
-                    color: AppColors.success,
-                    onPressed: _openDoorLoading ? null : _openDoor,
-                  ),
-                  _actionButton(
-                    icon: Icons.videocam,
-                    label: 'Принять',
-                    color: AppColors.purple,
-                    onPressed: () {
-                      if (_videoController != null && _liveUrl != null) {
-                        _videoController?.play();
-                      }
-                      widget.onDismiss();
-                    },
-                  ),
+                  _actionButton(icon: Icons.call_end, label: 'Сбросить', color: AppColors.danger, onPressed: widget.onDismiss),
+                  _actionButton(icon: Icons.lock_open, label: _openDoorLoading ? '...' : 'Открыть', color: AppColors.success, onPressed: _openDoorLoading ? null : _openDoor),
+                  _actionButton(icon: Icons.videocam, label: 'Ответить', color: AppColors.purple, onPressed: _answer),
                 ],
               ),
             ),
@@ -177,7 +155,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     );
   }
 
-  Widget _buildVideoArea(String subtitle) {
+  Widget _buildVideoArea() {
     if (_loadingVideo && _videoController == null) {
       return const Column(
         mainAxisSize: MainAxisSize.min,
@@ -188,32 +166,13 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
         ],
       );
     }
-    if (_videoController != null && _videoController!.value.isInitialized) {
-      return AspectRatio(
-        aspectRatio: _videoController!.value.aspectRatio,
-        child: VideoPlayer(_videoController!),
-      );
+    if (_videoController != null) {
+      return AspectRatio(aspectRatio: 16 / 9, child: Video(controller: _videoController!, fill: Colors.black));
     }
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.videocam_off, size: 64, color: Colors.white38),
-        const SizedBox(height: 8),
-        Text(
-          subtitle.isNotEmpty ? subtitle : 'Домофон',
-          style: const TextStyle(color: Colors.white70, fontSize: 16),
-          textAlign: TextAlign.center,
-        ),
-      ],
-    );
+    return const Icon(Icons.videocam_off, size: 64, color: Colors.white38);
   }
 
-  Widget _actionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback? onPressed,
-  }) {
+  Widget _actionButton({required IconData icon, required String label, required Color color, required VoidCallback? onPressed}) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [

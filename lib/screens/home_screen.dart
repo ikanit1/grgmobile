@@ -1,14 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api/backend_client.dart';
 import '../models/auth_user.dart';
+import '../services/events_socket_service.dart';
 import '../models/device_settings.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/slide_route.dart';
 import 'add_device_screen.dart';
 import 'applications_screen.dart';
-import 'door_control_backend_screen.dart';
+import 'live_view_screen.dart';
 import 'door_control_screen.dart';
 import 'door_log_screen.dart';
 import 'settings_screen.dart';
@@ -263,13 +266,32 @@ class _BackendHomeContent extends StatefulWidget {
 
 class _BackendHomeContentState extends State<_BackendHomeContent> {
   List<BuildingDto> _buildings = [];
+  List<RecentEventDto> _recentEvents = [];
+  int _unreadCount = 0;
   bool _loading = true;
   String? _error;
+  StreamSubscription<RealtimeEvent>? _wsSub;
 
   @override
   void initState() {
     super.initState();
     _loadBuildings();
+    _wsSub = EventsSocketService.instance.events.listen(_onRealtimeEvent);
+  }
+
+  @override
+  void dispose() {
+    _wsSub?.cancel();
+    super.dispose();
+  }
+
+  void _onRealtimeEvent(RealtimeEvent event) {
+    if (!mounted) return;
+    final dto = RecentEventDto.fromJson(event.toEventMap());
+    setState(() {
+      _recentEvents = [dto, ..._recentEvents].take(5).toList();
+      _unreadCount += 1;
+    });
   }
 
   Future<void> _loadBuildings() async {
@@ -283,10 +305,27 @@ class _BackendHomeContentState extends State<_BackendHomeContent> {
         _buildings = list;
         _loading = false;
       });
+      if (mounted) _loadEvents();
     } catch (e) {
       if (mounted) setState(() {
         _error = e.toString();
         _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadEvents() async {
+    try {
+      final events = await widget.client.getRecentEvents(limit: 5);
+      final count = await widget.client.getUnreadEventsCount();
+      if (mounted) setState(() {
+        _recentEvents = events;
+        _unreadCount = count;
+      });
+    } catch (_) {
+      if (mounted) setState(() {
+        _recentEvents = [];
+        _unreadCount = 0;
       });
     }
   }
@@ -384,7 +423,10 @@ class _BackendHomeContentState extends State<_BackendHomeContent> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: RefreshIndicator(
-        onRefresh: _loadBuildings,
+        onRefresh: () async {
+          await _loadBuildings();
+          await _loadEvents();
+        },
         color: AppColors.purple,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
@@ -403,6 +445,13 @@ class _BackendHomeContentState extends State<_BackendHomeContent> {
               style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 14),
+            _RecentEventsBlock(
+              events: _recentEvents,
+              unreadCount: _unreadCount,
+              client: widget.client,
+              onTap: _loadEvents,
+            ),
+            const SizedBox(height: 16),
             ..._buildings.map((b) => _BuildingCard(
                   building: b,
                   client: widget.client,
@@ -413,6 +462,208 @@ class _BackendHomeContentState extends State<_BackendHomeContent> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _RecentEventsBlock extends StatelessWidget {
+  const _RecentEventsBlock({
+    required this.events,
+    required this.unreadCount,
+    required this.client,
+    this.onTap,
+  });
+
+  final List<RecentEventDto> events;
+  final int unreadCount;
+  final BackendClient client;
+  final VoidCallback? onTap;
+
+  static String _eventTypeLabel(String type) {
+    switch (type) {
+      case 'door_open':
+        return 'Открытие двери';
+      case 'dial':
+        return 'Вызов';
+      case 'incoming_call':
+        return 'Входящий вызов';
+      case 'motion':
+      case 'VMD':
+        return 'Движение';
+      case 'io_alarm':
+        return 'Тревога';
+      default:
+        return type;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        onTap: () {
+          onTap?.call();
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => _AllEventsScreen(client: client),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.history, color: AppColors.purple, size: 20),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Последние события',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  if (unreadCount > 0) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.purple,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '$unreadCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (events.isEmpty)
+                const Text(
+                  'Нет событий',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                )
+              else
+                ...events.take(5).map((e) {
+                  final date = e.createdAt.length >= 19 ? e.createdAt.substring(0, 16).replaceFirst('T', ' ') : e.createdAt;
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Row(
+                      children: [
+                        if (e.snapshotUrl != null && e.snapshotUrl!.isNotEmpty)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.network(
+                              e.snapshotUrl!,
+                              width: 40,
+                              height: 30,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const SizedBox(width: 40, height: 30),
+                            ),
+                          )
+                        else
+                          const SizedBox(width: 40, height: 30, child: Icon(Icons.circle, size: 8, color: AppColors.textSecondary)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '${_eventTypeLabel(e.eventType)} · $date',
+                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AllEventsScreen extends StatefulWidget {
+  const _AllEventsScreen({required this.client});
+  final BackendClient client;
+
+  @override
+  State<_AllEventsScreen> createState() => _AllEventsScreenState();
+}
+
+class _AllEventsScreenState extends State<_AllEventsScreen> {
+  List<RecentEventDto> _events = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final list = await widget.client.getRecentEvents(limit: 50);
+      if (mounted) setState(() {
+        _events = list;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('События'),
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.textPrimary,
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: AppColors.purple))
+          : _events.isEmpty
+              ? const Center(child: Text('Нет событий', style: TextStyle(color: AppColors.textSecondary)))
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  color: AppColors.purple,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _events.length,
+                    itemBuilder: (context, i) {
+                      final e = _events[i];
+                      final date = e.createdAt.length >= 19 ? e.createdAt.substring(0, 16).replaceFirst('T', ' ') : e.createdAt;
+                      return GlassCard(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: e.snapshotUrl != null && e.snapshotUrl!.isNotEmpty
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(e.snapshotUrl!, width: 56, height: 42, fit: BoxFit.cover),
+                                )
+                              : const Icon(Icons.event_note, color: AppColors.purple),
+                          title: Text(_RecentEventsBlock._eventTypeLabel(e.eventType), style: const TextStyle(color: AppColors.textPrimary)),
+                          subtitle: Text(date, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                        ),
+                      );
+                    },
+                  ),
+                ),
     );
   }
 }
@@ -709,8 +960,8 @@ class _BuildingDevicesScreenState extends State<_BuildingDevicesScreen> {
                                 : const Icon(Icons.chevron_right, color: AppColors.textSecondary),
                             onTap: () => Navigator.push(
                               context,
-                              SlideRoute(
-                                builder: (_) => DoorControlBackendScreen(
+                              MaterialPageRoute(
+                                builder: (_) => LiveViewScreen(
                                   client: widget.client,
                                   deviceId: d.id,
                                   deviceName: d.name,
