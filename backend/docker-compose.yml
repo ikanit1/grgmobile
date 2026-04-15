@@ -16,5 +16,17 @@ services:
       timeout: 5s
       retries: 20
 
+  go2rtc:
+    image: alexxit/go2rtc:latest
+    container_name: doorphone-go2rtc
+    restart: unless-stopped
+    ports:
+      - "1984:1984"
+      - "8554:8554"
+    volumes:
+      - ./go2rtc.yaml:/config/go2rtc.yaml:ro
+    environment:
+      - GO2RTC_CONFIG=/config/go2rtc.yaml
+
 volumes:
   doorphone_postgres_data:
