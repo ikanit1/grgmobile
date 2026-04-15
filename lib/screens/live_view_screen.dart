@@ -1,6 +1,8 @@
 // lib/screens/live_view_screen.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../api/backend_client.dart';
+import '../services/stream_quality_service.dart';
 import '../widgets/rtsp_player_widget.dart';
 import '../theme/app_theme.dart';
 
@@ -21,29 +23,50 @@ class LiveViewScreen extends StatefulWidget {
 }
 
 class _LiveViewScreenState extends State<LiveViewScreen> {
-  String? _rtspUrl;
+  String? _streamUrl;
   String? _error;
   bool _openDoorLoading = false;
   bool _ptzSupported = false;
   bool _showPtz = false;
   final _playerKey = GlobalKey<RtspPlayerWidgetState>();
+  StreamSubscription? _connectivitySub;
 
   @override
   void initState() {
     super.initState();
     _loadLiveUrl();
     _checkPtz();
+    // Restart stream automatically on network type change
+    _connectivitySub = StreamQualityService.instance.onChanged.listen((_) {
+      if (mounted) _loadLiveUrl();
+    });
+  }
+
+  @override
+  void dispose() {
+    _connectivitySub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadLiveUrl() async {
     try {
-      final url = await widget.client.getLiveUrl(widget.deviceId);
+      final pref = await StreamQualityService.instance.getPreference();
+      final liveUrl = await widget.client.getLiveUrl(
+        widget.deviceId,
+        stream: pref.streamType,
+      );
       if (!mounted) return;
+
+      // Pick HLS on cellular (WAN), direct RTSP on WiFi (LAN)
+      final url = (pref.preferHls && liveUrl.hlsUrl != null)
+          ? liveUrl.hlsUrl!
+          : liveUrl.rtspUrl;
+
       if (url.trim().isEmpty) {
         setState(() => _error = 'Не получен адрес видеопотока');
         return;
       }
-      setState(() => _rtspUrl = url.trim());
+      setState(() { _streamUrl = url.trim(); _error = null; });
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     }
@@ -81,15 +104,11 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
   }
 
   Future<void> _ptzMove(String direction) async {
-    try {
-      await widget.client.ptzMove(widget.deviceId, direction);
-    } catch (_) {}
+    try { await widget.client.ptzMove(widget.deviceId, direction); } catch (_) {}
   }
 
   Future<void> _ptzStop() async {
-    try {
-      await widget.client.ptzStop(widget.deviceId);
-    } catch (_) {}
+    try { await widget.client.ptzStop(widget.deviceId); } catch (_) {}
   }
 
   @override
@@ -123,8 +142,8 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
         children: [
           Expanded(
             flex: 3,
-            child: _rtspUrl != null
-                ? RtspPlayerWidget(key: _playerKey, rtspUrl: _rtspUrl!)
+            child: _streamUrl != null
+                ? RtspPlayerWidget(key: _playerKey, rtspUrl: _streamUrl!)
                 : _error != null
                     ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
                     : const Center(child: CircularProgressIndicator()),
