@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'auth_storage.dart';
 import '../models/api_config.dart';
 import '../models/auth_user.dart';
+import '../models/live_url_dto.dart';
 
 class BackendClient {
   BackendClient(this._config, this._authStorage);
@@ -314,7 +315,7 @@ class BackendClient {
     );
   }
 
-  Future<String> getLiveUrl(int deviceId, {int? channel, String? stream}) async {
+  Future<LiveUrlDto> getLiveUrl(int deviceId, {int? channel, String? stream}) async {
     var path = 'devices/$deviceId/live-url';
     final q = <String>[];
     if (channel != null) q.add('channel=$channel');
@@ -322,9 +323,7 @@ class BackendClient {
     if (q.isNotEmpty) path += '?${q.join('&')}';
     final res = await _getWithRetry(path);
     if (res.statusCode != 200) throw BackendException(_errorMessage(res), res.statusCode);
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    final url = data['url'] as String? ?? data['liveUrl'] as String? ?? '';
-    return url;
+    return LiveUrlDto.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
   Future<List<DeviceEventDto>> getDeviceEvents(int deviceId, {String? from, String? to, int? limit}) async {
