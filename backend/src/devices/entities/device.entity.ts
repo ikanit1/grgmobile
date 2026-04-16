@@ -85,6 +85,14 @@ export class Device {
   @Column({ name: 'mac_address', type: 'varchar', length: 17, nullable: true })
   macAddress?: string;
 
+  /**
+   * Floor restriction for residents. null = visible to ALL residents in the building.
+   * Set to a floor number (e.g. 3) to restrict visibility to residents on that floor only.
+   * Admins (ORG_ADMIN, COMPLEX_MANAGER, SUPER_ADMIN) always see all devices regardless.
+   */
+  @Column({ name: 'floor', type: 'int', nullable: true })
+  floor?: number | null;
+
   /** True after provisioning script has been applied successfully. */
   @Column({ name: 'is_configured', type: 'boolean', default: false })
   isConfigured: boolean;

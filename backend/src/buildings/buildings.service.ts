@@ -143,12 +143,23 @@ export class BuildingsService {
 
   async findDevices(buildingId: number, user: RequestUser): Promise<Device[]> {
     await this.accessService.assertCanAccessBuilding(user, buildingId);
-    const cacheKey = `devices:building:${buildingId}`;
-    const cached = await this.cacheManager.get<Device[]>(cacheKey);
-    if (cached) return cached;
-    const devices = await this.devicesRepo.find({ where: { buildingId } });
-    await this.cacheManager.set(cacheKey, devices, DEVICES_CACHE_TTL);
-    return devices;
+
+    // Admins always see all devices — use cache
+    const residentFloors = await this.accessService.getResidentFloorsInBuilding(user, buildingId);
+    if (residentFloors === null) {
+      const cacheKey = `devices:building:${buildingId}`;
+      const cached = await this.cacheManager.get<Device[]>(cacheKey);
+      if (cached) return cached;
+      const devices = await this.devicesRepo.find({ where: { buildingId } });
+      await this.cacheManager.set(cacheKey, devices, DEVICES_CACHE_TTL);
+      return devices;
+    }
+
+    // RESIDENT: show devices with no floor restriction OR matching resident's floor(s)
+    const all = await this.devicesRepo.find({ where: { buildingId } });
+    return all.filter(
+      (d) => d.floor == null || residentFloors.includes(d.floor),
+    );
   }
 
   async invalidateDevicesCache(buildingId: number): Promise<void> {
@@ -171,6 +182,7 @@ export class BuildingsService {
       defaultChannel?: number;
       defaultStream?: string;
       macAddress?: string;
+      floor?: number | null;
     },
     user: RequestUser,
   ): Promise<Device> {
@@ -221,6 +233,7 @@ export class BuildingsService {
       defaultChannel: dto.defaultChannel,
       defaultStream: dto.defaultStream,
       macAddress: dto.macAddress,
+      floor: dto.floor ?? null,
     });
     const saved = await this.devicesRepo.save(dev) as Device;
     this.eventLogService.create(null, EVENT_TYPE_DEVICE_ADDED, { name: dto.name, host: dto.host, type: dto.type }, {

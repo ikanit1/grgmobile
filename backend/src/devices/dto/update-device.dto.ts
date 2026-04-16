@@ -57,4 +57,10 @@ export class UpdateDeviceDto {
   @IsOptional()
   @IsString()
   macAddress?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(200)
+  floor?: number | null;
 }

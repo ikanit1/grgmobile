@@ -129,6 +129,30 @@ export class AccessService {
     return (rows as { userId: string }[]).map((r) => r.userId);
   }
 
+  /**
+   * Returns the floor numbers the resident occupies in a specific building.
+   * Used for floor-level device filtering: devices with floor=X are only visible
+   * to residents who have an apartment on floor X in that building.
+   * Returns null if the user is not a RESIDENT (admins see all devices).
+   * Returns [] if resident has no apartments in this building.
+   */
+  async getResidentFloorsInBuilding(user: RequestUser, buildingId: number): Promise<number[] | null> {
+    if (user.role !== UserRole.RESIDENT) return null;
+    const now = new Date();
+    const uas = await this.userApartmentsRepo.find({
+      where: { userId: user.id },
+      relations: ['apartment'],
+    });
+    const floors = new Set<number>();
+    for (const ua of uas) {
+      if (ua.validUntil != null && ua.validUntil < now) continue;
+      if (ua.apartment?.buildingId === buildingId && ua.apartment.floor != null) {
+        floors.add(ua.apartment.floor);
+      }
+    }
+    return Array.from(floors);
+  }
+
   /** Building IDs where this resident has apartments. */
   async getBuildingIdsForResident(userId: string): Promise<number[]> {
     const uas = await this.userApartmentsRepo.find({
