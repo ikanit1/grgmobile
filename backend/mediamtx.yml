@@ -1,0 +1,20 @@
+rtspAddress: :8557
+rtmpAddress: :1935
+hlsAddress: :8888
+webrtcAddress: :8889
+srtAddress: :8890
+
+logLevel: warn
+logDestinations: [stdout]
+
+readTimeout: 10s
+writeTimeout: 10s
+
+rtsp: yes
+rtmp: no
+hls: no
+webrtc: no
+srt: no
+
+pathDefaults:
+  record: no

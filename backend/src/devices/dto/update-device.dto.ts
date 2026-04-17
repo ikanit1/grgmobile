@@ -63,4 +63,8 @@ export class UpdateDeviceDto {
   @Min(0)
   @Max(200)
   floor?: number | null;
+
+  @IsOptional()
+  @IsString()
+  customRtspUrl?: string | null;
 }

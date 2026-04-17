@@ -25,7 +25,7 @@ class ApiConfig {
       };
 
   /// URL бэкенда по умолчанию. В настройках приложения (Настройки → URL API) можно указать другой адрес (например IP ПК в Wi‑Fi).
-  static const String defaultBaseUrl = 'http://localhost:3000';
+  static const String defaultBaseUrl = 'http://192.168.10.247:3000';
   /// По умолчанию включён бэкенд (приложение ходит в API).
   static const bool defaultUseBackend = true;
 

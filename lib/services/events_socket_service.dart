@@ -117,11 +117,14 @@ class EventsSocketService {
     if (msg.startsWith('42')) {
       try {
         final list = jsonDecode(msg.substring(2)) as List<dynamic>;
+        final eventName = list.isNotEmpty ? list[0].toString() : '';
+        // Игнорируем служебные Socket.IO события (error, connect_error и т.д.)
+        if (eventName == 'error' || eventName == 'connect_error') return;
         if (list.length >= 2) {
           final data = Map<String, dynamic>.from(list[1] as Map);
           final type = data['type'] as String? ??
               data['eventType'] as String? ??
-              list[0].toString();
+              eventName;
           _controller.add(RealtimeEvent(type: type, data: data));
         }
       } catch (e) {

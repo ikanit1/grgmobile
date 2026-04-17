@@ -68,6 +68,13 @@ export class IsValidHostConstraint implements ValidatorConstraintInterface {
 
     const trimmed = host.trim();
 
+    // В dev-режиме loopback разрешён (для mock-серверов на localhost)
+    if (process.env.ALLOW_LOOPBACK_HOSTS === 'true' || process.env.NODE_ENV === 'development') {
+      if (isIpAddress(trimmed)) return true;
+      if (/[a-zA-Z\-]/.test(trimmed)) return true;
+      return false;
+    }
+
     // Если это домен (содержит буквы или дефисы), считаем валидным
     if (/[a-zA-Z\-]/.test(trimmed)) {
       return true;

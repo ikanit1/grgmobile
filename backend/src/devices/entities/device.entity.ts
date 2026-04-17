@@ -93,6 +93,14 @@ export class Device {
   @Column({ name: 'floor', type: 'int', nullable: true })
   floor?: number | null;
 
+  /**
+   * Custom RTSP URL override. If set, used directly instead of LiteAPI or constructed URL.
+   * Useful for OBS test streams, cameras with non-standard RTSP paths, etc.
+   * Example: rtsp://192.168.1.100:554/live
+   */
+  @Column({ name: 'custom_rtsp_url', type: 'varchar', nullable: true })
+  customRtspUrl?: string | null;
+
   /** True after provisioning script has been applied successfully. */
   @Column({ name: 'is_configured', type: 'boolean', default: false })
   isConfigured: boolean;

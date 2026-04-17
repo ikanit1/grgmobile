@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GRG Mobile — Design Review</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles/tokens.css" />
+  <style>
+    *{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+    html,body{margin:0;padding:0}
+    body{min-height:100vh}
+    a{color:inherit}
+
+    /* ===== Layout ===== */
+    .page{
+      min-height:100vh;
+      display:grid;
+      grid-template-columns: 260px 1fr;
+    }
+    .sidebar{
+      position:sticky; top:0; align-self:start;
+      height:100vh; padding:24px 18px;
+      border-right:1px solid var(--grg-glass-border);
+      background: rgba(10,4,24,.6);
+      backdrop-filter: blur(18px);
+      display:flex; flex-direction:column; gap:20px;
+      z-index:5;
+    }
+    .brand{display:flex; align-items:center; gap:10px}
+    .brand .logo{
+      width:36px; height:36px; border-radius:10px;
+      background: conic-gradient(from 210deg, #8A2BE2, #5FA8FF, #8A2BE2);
+      box-shadow: var(--grg-shadow-glow);
+      position:relative;
+    }
+    .brand .logo::after{
+      content:""; position:absolute; inset:6px; border-radius:7px;
+      background: var(--grg-ink-950);
+    }
+    .brand .logo::before{
+      content:""; position:absolute; inset:11px; border-radius:3px;
+      background: linear-gradient(180deg,#8A2BE2,#5FA8FF);
+      z-index:1;
+    }
+    .brand h1{
+      margin:0; font-family: var(--grg-font-display);
+      font-weight:700; font-size:16px; letter-spacing:.3px;
+    }
+    .brand small{display:block; color:var(--grg-ink-300); font-size:11px; font-weight:500; letter-spacing:1.5px; text-transform:uppercase}
+
+    .nav{display:flex; flex-direction:column; gap:2px; margin-top:6px}
+    .nav-section{font-size:10px; letter-spacing:1.8px; text-transform:uppercase; color:var(--grg-ink-400); padding:12px 10px 6px}
+    .nav a{
+      display:flex; align-items:center; gap:10px;
+      padding:9px 10px; border-radius:10px;
+      color:var(--grg-ink-200); font-size:13px; text-decoration:none;
+      transition: background var(--grg-dur-fast) var(--grg-ease), color var(--grg-dur-fast);
+    }
+    .nav a:hover{background:rgba(138,43,226,.12); color:#fff}
+    .nav a.active{background:rgba(138,43,226,.22); color:#fff}
+    .nav a .dot{width:6px; height:6px; border-radius:99px; background:var(--grg-ink-400)}
+    .nav a.active .dot{background:var(--grg-purple-500); box-shadow:0 0 8px var(--grg-purple-500)}
+
+    .side-foot{margin-top:auto; font-size:11px; color:var(--grg-ink-400); line-height:1.5}
+
+    /* ===== Content ===== */
+    .content{padding:40px 56px 120px; max-width:1600px}
+    .hero{
+      padding: 24px 0 40px;
+      border-bottom:1px solid var(--grg-glass-border);
+      margin-bottom:48px;
+      display:grid; grid-template-columns: 1.6fr 1fr; gap:40px;
+    }
+    .eyebrow{
+      display:inline-flex; align-items:center; gap:8px;
+      font-family: var(--grg-font-mono);
+      font-size:11px; letter-spacing:2px; text-transform:uppercase;
+      color:var(--grg-purple-300);
+      padding:6px 10px; border:1px solid var(--grg-glass-border);
+      border-radius:99px; background:rgba(138,43,226,.08);
+    }
+    .hero h2{
+      font-family: var(--grg-font-display);
+      font-size: clamp(32px, 4.2vw, 56px);
+      line-height:1.05; letter-spacing:-.02em;
+      margin: 16px 0 14px; text-wrap: balance;
+      background: linear-gradient(180deg, #fff 0%, #C9A6FF 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .hero p{font-size:16px; line-height:1.6; color:var(--grg-ink-200); max-width: 56ch; margin:0}
+    .hero .stats{
+      display:grid; grid-template-columns: repeat(2, 1fr); gap:14px;
+      align-self:end;
+    }
+    .stat{
+      padding:14px 16px; border-radius: var(--grg-r-lg);
+      background: var(--grg-glass-base); border:1px solid var(--grg-glass-border);
+      backdrop-filter: blur(var(--grg-blur-md));
+    }
+    .stat b{display:block; font-family:var(--grg-font-display); font-size:28px; font-weight:600; letter-spacing:-.01em}
+    .stat span{color:var(--grg-ink-300); font-size:12px; text-transform:uppercase; letter-spacing:1.5px}
+
+    /* ===== Section scaffolding ===== */
+    section.row{padding:64px 0; border-bottom:1px dashed var(--grg-glass-border)}
+    section.row:last-child{border-bottom:none}
+    .row-head{display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-bottom:28px}
+    .row-head h3{
+      font-family: var(--grg-font-display); font-weight:600;
+      font-size: 28px; margin:0 0 6px; letter-spacing:-.01em;
+    }
+    .row-head .tag{
+      font-family:var(--grg-font-mono); font-size:11px; color:var(--grg-purple-300);
+      text-transform:uppercase; letter-spacing:2px;
+    }
+    .row-head p{margin:0; color:var(--grg-ink-200); max-width:60ch; line-height:1.55}
+
+    /* Side-by-side layout */
+    .sbs{
+      display:grid; grid-template-columns: 1fr 1fr; gap:24px;
+    }
+    .sbs > .col{display:flex; flex-direction:column; gap:12px}
+    .col-label{
+      display:flex; align-items:center; gap:10px;
+      font-family: var(--grg-font-mono); font-size:11px; letter-spacing:2px;
+      text-transform:uppercase;
+    }
+    .col-label.before{color:#FF9CB1}
+    .col-label.after{color:#A7FFD6}
+    .col-label .pill{
+      padding:4px 10px; border-radius:99px;
+      font-weight:600;
+    }
+    .col-label.before .pill{background:rgba(255,107,107,.15); color:#FFB3B3; border:1px solid rgba(255,107,107,.3)}
+    .col-label.after  .pill{background:rgba(61,213,152,.14); color:#A7FFD6; border:1px solid rgba(61,213,152,.3)}
+
+    .col-note{
+      font-size:12px; color:var(--grg-ink-300); line-height:1.5;
+      padding-left:10px; border-left:2px solid var(--grg-glass-border);
+    }
+
+    /* Stage: scaled viewport for a "phone" or "desktop" mockup */
+    .stage{
+      position:relative; background: transparent;
+      padding:28px; border-radius:var(--grg-r-xl);
+      border:1px solid var(--grg-glass-border);
+      background:
+        radial-gradient(120% 70% at 50% 0%, rgba(138,43,226,.10), transparent 60%),
+        rgba(10,4,24,.35);
+      display:flex; align-items:center; justify-content:center;
+      min-height: 720px;
+    }
+    .stage.desktop{min-height: 620px; padding:20px}
+
+    /* Phone bezel */
+    .phone{
+      width: 340px; height: 700px;
+      background: #000; border-radius: 44px;
+      padding: 10px; position:relative;
+      box-shadow:
+        inset 0 0 0 2px #2a1a45,
+        0 30px 60px -20px rgba(0,0,0,.7),
+        0 0 0 1px rgba(138,43,226,.3);
+    }
+    .phone .screen{
+      width:100%; height:100%; border-radius:36px;
+      overflow:hidden; position:relative;
+      background:
+        radial-gradient(700px 400px at 80% -10%, rgba(138,43,226,.45), transparent 60%),
+        radial-gradient(500px 300px at -10% 90%, rgba(95,168,255,.18), transparent 60%),
+        linear-gradient(180deg, #150729 0%, #0A0418 100%);
+      color:#fff;
+      font-family: var(--grg-font-sans);
+      display:flex; flex-direction:column;
+    }
+    .phone .notch{
+      position:absolute; top:6px; left:50%; transform:translateX(-50%);
+      width:110px; height:24px; background:#000; border-radius:20px; z-index:9;
+    }
+    .status-bar{
+      display:flex; justify-content:space-between; align-items:center;
+      padding: 14px 22px 6px; font-size:12px; font-weight:600; letter-spacing:.2px;
+      flex-shrink:0;
+    }
+    .status-bar .icons{display:flex; gap:5px; align-items:center}
+    .status-bar .battery{
+      width:22px; height:11px; border:1px solid #fff; border-radius:3px;
+      position:relative; padding:1px;
+    }
+    .status-bar .battery::after{content:""; position:absolute; right:-3px; top:3px; width:2px; height:5px; background:#fff; border-radius:0 2px 2px 0}
+    .status-bar .battery .lvl{height:100%; width:78%; background:#fff; border-radius:1px}
+
+    .phone-body{flex:1; display:flex; flex-direction:column; overflow:hidden; padding-top:4px}
+
+    /* Bottom tabbar */
+    .tabbar{
+      margin: 0 10px 10px; padding:8px 6px;
+      background: rgba(26,11,46,.55); border:1px solid var(--grg-glass-border);
+      border-radius:20px; backdrop-filter: blur(var(--grg-blur-md));
+      display:flex;
+    }
+    .tab{
+      flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+      padding:8px 4px; border-radius:14px; color:var(--grg-ink-300);
+      font-size:10.5px; font-weight:500; position:relative;
+      transition: all var(--grg-dur-fast) var(--grg-ease);
+    }
+    .tab.active{background:rgba(138,43,226,.18); color:#fff; font-weight:700}
+    .tab.active .icon{color:var(--grg-purple-500)}
+    .icon{display:inline-flex; width:22px; height:22px; color:var(--grg-ink-300)}
+    .tab .badge{
+      position:absolute; top:4px; right:14px;
+      min-width:16px; height:16px; padding:0 4px;
+      background:var(--grg-danger); color:#fff;
+      border-radius:99px; font-size:10px; font-weight:700;
+      display:inline-flex; align-items:center; justify-content:center;
+    }
+
+    /* Generic phone cards */
+    .pcard{
+      background: var(--grg-glass-base); border:1px solid var(--grg-glass-border);
+      border-radius:16px; padding:14px; backdrop-filter: blur(var(--grg-blur-md));
+    }
+    .pcard.dense{padding:12px}
+    .pcard.nodesktop-blur{backdrop-filter:none}
+    .pcard-row{display:flex; align-items:center; gap:12px}
+    .pcard h4{margin:0; font-size:15px; font-weight:700; letter-spacing:-.01em}
+    .pcard small{color:var(--grg-ink-300); font-size:12px; display:block; margin-top:2px}
+
+    .icontile{
+      width:44px; height:44px; border-radius:13px; flex-shrink:0;
+      background: rgba(138,43,226,.22); color:var(--grg-purple-500);
+      display:inline-flex; align-items:center; justify-content:center;
+    }
+
+    /* --- "Before" visual flatness to replicate current state --- */
+    .flat{
+      background: rgba(26,11,46,.35);
+      border:1px solid rgba(138,43,226,.25);
+      /* NO backdrop-filter — intentional: this is the "before" */
+    }
+
+    /* ===== Tokens table ===== */
+    .tokens-grid{
+      display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap:12px;
+    }
+    .swatch{
+      border-radius:14px; overflow:hidden;
+      border:1px solid var(--grg-glass-border);
+      background: var(--grg-glass-base); backdrop-filter: blur(var(--grg-blur-md));
+    }
+    .swatch .chip{height:72px}
+    .swatch .meta{padding:10px 12px; font-family:var(--grg-font-mono); font-size:11px; color:var(--grg-ink-200); display:flex; justify-content:space-between; gap:8px}
+    .swatch .meta b{color:#fff; font-weight:600}
+
+    .typestack{display:flex; flex-direction:column; gap:14px}
+    .typerow{
+      display:grid; grid-template-columns: 120px 1fr auto; gap:16px; align-items:baseline;
+      padding:10px 14px; border-radius:12px;
+      background: var(--grg-glass-base); border:1px solid var(--grg-glass-border);
+    }
+    .typerow .lbl{font-family:var(--grg-font-mono); color:var(--grg-ink-300); font-size:11px; letter-spacing:1px; text-transform:uppercase}
+    .typerow .spec{font-family:var(--grg-font-mono); color:var(--grg-ink-300); font-size:11px}
+
+    .spacing-row{display:flex; align-items:flex-end; gap:8px; padding:20px; background: var(--grg-glass-base); border:1px solid var(--grg-glass-border); border-radius:14px}
+    .sp-bar{background: linear-gradient(180deg, var(--grg-purple-500), var(--grg-purple-700)); border-radius:4px; position:relative; width:44px; color:#fff; text-align:center}
+    .sp-bar span{position:absolute; bottom:-20px; left:0; right:0; font-family:var(--grg-font-mono); font-size:11px; color:var(--grg-ink-200)}
+
+    /* ===== Admin mockups ===== */
+    .desktop-frame{
+      width:100%; max-width:980px;
+      border-radius:18px; overflow:hidden;
+      background: #0A0418; border:1px solid var(--grg-glass-border);
+      box-shadow: 0 30px 80px -30px rgba(0,0,0,.7);
+    }
+    .desktop-frame .titlebar{
+      display:flex; align-items:center; gap:8px; padding:10px 14px;
+      background: #120724; border-bottom:1px solid var(--grg-glass-border);
+    }
+    .desktop-frame .titlebar .dot{width:11px; height:11px; border-radius:99px}
+    .desktop-frame .body{display:grid; grid-template-columns: 220px 1fr; min-height:520px}
+
+    .legend{
+      display:flex; gap:18px; flex-wrap:wrap;
+      padding:12px 16px; margin-top: 24px;
+      border-radius:12px; background: rgba(10,4,24,.4); border:1px solid var(--grg-glass-border);
+      font-size:12px; color:var(--grg-ink-200);
+    }
+    .legend b{color:#fff}
+    .legend .red{color:#FF9CB1}
+    .legend .green{color:#A7FFD6}
+
+    /* helpers */
+    .chip-pill{
+      display:inline-flex; gap:6px; align-items:center;
+      font-family:var(--grg-font-mono); font-size:10.5px; letter-spacing:1.2px;
+      padding:4px 8px; border-radius:99px;
+      background:rgba(138,43,226,.15); color:var(--grg-purple-300);
+      border:1px solid rgba(138,43,226,.3);
+    }
+
+    /* annotation callouts on mockups */
+    .mock-annot{
+      position:absolute; font-family:var(--grg-font-mono); font-size:10.5px;
+      color:#FFB3B3; background: rgba(255,107,107,.12);
+      border:1px dashed rgba(255,107,107,.45); border-radius:8px;
+      padding:4px 8px; pointer-events:none; white-space:nowrap;
+    }
+    .mock-annot.ok{color:#A7FFD6; background: rgba(61,213,152,.1); border-color: rgba(61,213,152,.45)}
+
+    /* responsive: collapse sidebar on narrow */
+    @media (max-width: 1100px){
+      .page{grid-template-columns: 1fr}
+      .sidebar{position:static; height:auto; flex-direction:row; flex-wrap:wrap}
+      .sbs{grid-template-columns: 1fr}
+      .hero{grid-template-columns: 1fr}
+    }
+  </style>
+</head>
+<body class="grg-bg">
+  <div class="page">
+    <!-- =========================== SIDEBAR =========================== -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo"></div>
+        <div>
+          <h1>GRG Mobile</h1>
+          <small>Design review · v1</small>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <div class="nav-section">Разделы</div>
+        <a href="#overview" class="active"><span class="dot"></span> Обзор и выводы</a>
+        <a href="#tokens"><span class="dot"></span> Design tokens</a>
+
+        <div class="nav-section">Мобильное</div>
+        <a href="#navigation"><span class="dot"></span> Навигация · 2→4</a>
+        <a href="#glass"><span class="dot"></span> Настоящий Glass</a>
+        <a href="#skeleton"><span class="dot"></span> Skeleton-загрузка</a>
+        <a href="#profile"><span class="dot"></span> Профиль</a>
+        <a href="#incoming"><span class="dot"></span> Входящий звонок</a>
+
+        <div class="nav-section">Веб-админка</div>
+        <a href="#admin"><span class="dot"></span> Sidebar · шрифт · токены</a>
+
+        <div class="nav-section">Файлы</div>
+        <a href="#summary"><span class="dot"></span> Сводный список</a>
+      </nav>
+
+      <div class="side-foot">
+        Проект: <b style="color:#fff">grgmobileapp</b><br>
+        Flutter + NestJS + Admin SPA<br>
+        Основа: design-critique.md
+      </div>
+    </aside>
+
+    <!-- =========================== CONTENT =========================== -->
+    <main class="content">
+
+      <!-- HERO -->
+      <header class="hero" id="overview">
+        <div>
+          <span class="eyebrow">● DESIGN REVIEW · 18 апр 2026</span>
+          <h2>Единая дизайн-система<br/>для Flutter и веб-админки</h2>
+          <p>
+            Сейчас продукт живёт в двух визуальных мирах: фиолетовое Flutter-приложение с
+            Manrope и тёмная веб-админка на JetBrains&nbsp;Mono с другим оттенком фиолетового.
+            Ниже — единые токены, и шесть конкретных мест, где дизайн сильнее всего выиграет.
+          </p>
+        </div>
+        <div class="stats">
+          <div class="stat"><b>10</b><span>Приоритетов из критики</span></div>
+          <div class="stat"><b>6</b><span>Side-by-side мокапов</span></div>
+          <div class="stat"><b>1</b><span>Источник токенов</span></div>
+          <div class="stat"><b>2</b><span>Платформы в одном языке</span></div>
+        </div>
+      </header>
+
+      <!-- =================== TOKENS =================== -->
+      <section class="row" id="tokens">
+        <div class="row-head">
+          <div>
+            <span class="tag">01 · Design tokens</span>
+            <h3>Один источник правды: <span style="color:var(--grg-purple-300)">design-tokens</span></h3>
+            <p>Сейчас в Flutter акцент <code>#8A2BE2</code>, в админке — <code>#a78bfa</code>. Успех/ошибка тоже разные. Канонический набор ниже генерируется в <code>app_theme.dart</code> и CSS-переменные одной командой.</p>
+          </div>
+          <span class="chip-pill">STATUS · canonical</span>
+        </div>
+
+        <!-- Colors -->
+        <h4 style="font-family:var(--grg-font-display); font-weight:600; color:var(--grg-ink-200); margin:8px 0 10px; font-size:14px; letter-spacing:1.5px; text-transform:uppercase">Brand · Purple</h4>
+        <div class="tokens-grid" style="margin-bottom:28px">
+          <div class="swatch"><div class="chip" style="background:#EADCFF"></div><div class="meta"><b>purple/100</b><span>#EADCFF</span></div></div>
+          <div class="swatch"><div class="chip" style="background:#C9A6FF"></div><div class="meta"><b>purple/300</b><span>#C9A6FF</span></div></div>
+          <div class="swatch"><div class="chip" style="background:#8A2BE2"></div><div class="meta"><b>purple/500 · primary</b><span>#8A2BE2</span></div></div>
+          <div class="swatch"><div class="chip" style="background:#7520C8"></div><div class="meta"><b>purple/600</b><span>#7520C8</span></div></div>
+          <div class="swatch"><div class="chip" style="background:#5A189A"></div><div class="meta"><b>purple/700</b><span>#5A189A</span></div></div>
+          <div class="swatch"><div class="chip" style="background:#2A0F4C"></div><div class="meta"><b>purple/900</b><span>#2A0F4C</span></div></div>
+        </div>
+
+        <h4 style="font-family:var(--grg-font-display); font-weight:600; color:var(--grg-ink-200); margin:8px 0 10px; font-size:14px; letter-spacing:1.5px; text-transform:uppercase">Neutrals · Ink</h4>
+        <div class="tokens-grid" style="margin-bottom:28px">
+          <div class="swatch"><div class="chip" style="background:#0E061A"></div><div class="meta"><b>ink/950</b><span>#0E061A</span></div></div>
+          <div class="swatch"><div class="chip" style="background:#1A0B2E"></div><div class="meta"><b>ink/800</b><span>#1A0B2E</span></div></div>
+          <div class="swatch"><div class="chip" style="background:#260F3F"></div><div class="meta"><b>ink/700</b><span>#260F3F</span></div></div>
+          <div class="swatch"><div class="chip" style="background:#6B5090"></div><div class="meta"><b>ink/400</b><span>#6B5090</span></div></div>
+          <div class="swatch"><div class="chip" style="background:#DACBF5"></div><div class="meta"><b>ink/200 · text-2°</b><span>#DACBF5</span></div></div>
+          <div class="swatch"><div class="chip" style="background:#F1E8FF"></div><div class="meta"><b>ink/100</b><span>#F1E8FF</span></div></div>
+        </div>
+
+        <h4 style="font-family:var(--grg-font-display); font-weight:600; color:var(--grg-ink-200); margin:8px 0 10px; font-size:14px; letter-spacing:1.5px; text-transform:uppercase">Semantic</h4>
+        <div class="tokens-grid" style="margin-bottom:32px">
+          <div class="swatch"><div class="chip" style="background:#3DD598"></div><div class="meta"><b>success</b><span>#3DD598</span></div></div>
+          <div class="swatch"><div class="chip" style="background:#F6C344"></div><div class="meta"><b>warning</b><span>#F6C344</span></div></div>
+          <div class="swatch"><div class="chip" style="background:#FF6B6B"></div><div class="meta"><b>danger</b><span>#FF6B6B</span></div></div>
+          <div class="swatch"><div class="chip" style="background:#5FA8FF"></div><div class="meta"><b>info</b><span>#5FA8FF</span></div></div>
+        </div>
+
+        <!-- Type -->
+        <h4 style="font-family:var(--grg-font-display); font-weight:600; color:var(--grg-ink-200); margin:24px 0 12px; font-size:14px; letter-spacing:1.5px; text-transform:uppercase">Typography · Manrope + Unbounded</h4>
+        <div class="typestack" style="margin-bottom:32px">
+          <div class="typerow">
+            <div class="lbl">display</div>
+            <div style="font-family:var(--grg-font-display); font-size:32px; font-weight:600; letter-spacing:-.02em">Откройте дверь одним касанием</div>
+            <div class="spec">Unbounded · 32 / 600</div>
+          </div>
+          <div class="typerow">
+            <div class="lbl">h1</div>
+            <div style="font-size:24px; font-weight:700">Мои здания</div>
+            <div class="spec">Manrope · 24 / 700</div>
+          </div>
+          <div class="typerow">
+            <div class="lbl">h2</div>
+            <div style="font-size:18px; font-weight:700">Последние события</div>
+            <div class="spec">Manrope · 18 / 700</div>
+          </div>
+          <div class="typerow">
+            <div class="lbl">body</div>
+            <div style="font-size:14px">Домофон Akuvox R20 · ул. Тверская, 12</div>
+            <div class="spec">Manrope · 14 / 400</div>
+          </div>
+          <div class="typerow">
+            <div class="lbl">caption</div>
+            <div style="font-size:12px; color:var(--grg-ink-200)">Входящий вызов · 14:32</div>
+            <div class="spec">Manrope · 12 / 500</div>
+          </div>
+          <div class="typerow">
+            <div class="lbl">mono</div>
+            <div style="font-family:var(--grg-font-mono); font-size:13px; color:var(--grg-purple-300)">GET /api/buildings</div>
+            <div class="spec">JetBrains · 13 / 400</div>
+          </div>
+        </div>
+
+        <!-- Spacing scale -->
+        <h4 style="font-family:var(--grg-font-display); font-weight:600; color:var(--grg-ink-200); margin:24px 0 12px; font-size:14px; letter-spacing:1.5px; text-transform:uppercase">Spacing · 4pt</h4>
+        <div class="spacing-row">
+          <div class="sp-bar" style="height:4px"><span>4</span></div>
+          <div class="sp-bar" style="height:8px"><span>8</span></div>
+          <div class="sp-bar" style="height:12px"><span>12</span></div>
+          <div class="sp-bar" style="height:16px"><span>16</span></div>
+          <div class="sp-bar" style="height:20px"><span>20</span></div>
+          <div class="sp-bar" style="height:24px"><span>24</span></div>
+          <div class="sp-bar" style="height:32px"><span>32</span></div>
+          <div class="sp-bar" style="height:40px"><span>40</span></div>
+        </div>
+      </section>
+
+      <!-- ============================================================= -->
+      <!--                    MOBILE — NAVIGATION 2→4                    -->
+      <!-- ============================================================= -->
+      <section class="row" id="navigation">
+        <div class="row-head">
+          <div>
+            <span class="tag">02 · Mobile · Navigation</span>
+            <h3>Навбар: 2 вкладки → 4 вкладки</h3>
+            <p>Сейчас из навбара доступны только «Домофон» и «Настройки». Профиль и события спрятаны в глубине экранов. Растягиваем до четырёх: <b>Главная · События · Управление · Профиль</b>.</p>
+          </div>
+          <span class="chip-pill">PRIORITY 1 · HIGH</span>
+        </div>
+
+        <div class="sbs">
+          <!-- BEFORE: 2 tabs -->
+          <div class="col">
+            <div class="col-label before"><span class="pill">СЕЙЧАС</span> 2 вкладки · всё спрятано</div>
+            <div class="stage">
+              <div class="phone">
+                <div class="notch"></div>
+                <div class="screen">
+                  <div class="status-bar">
+                    <span>9:41</span>
+                    <div class="icons">
+                      <svg width="14" height="10" viewBox="0 0 14 10" fill="none"><path d="M1 6L2 5.5C4 4.5 6 4.5 8 5.5L13 8" stroke="#fff" stroke-linecap="round"/><circle cx="3" cy="7" r="1" fill="#fff"/><circle cx="7" cy="6" r="1" fill="#fff"/><circle cx="11" cy="5" r="1" fill="#fff"/></svg>
+                      <div class="battery"><div class="lvl"></div></div>
+                    </div>
+                  </div>
+                  <div class="phone-body" style="padding:0 14px">
+                    <div style="padding:8px 4px 14px">
+                      <div style="font-size:20px; font-weight:700">Мои здания</div>
+                      <div style="font-size:12px; color:var(--grg-ink-300); margin-top:2px">Резидент · Иван Петров</div>
+                    </div>
+                    <div class="flat" style="border-radius:14px; padding:12px; margin-bottom:10px">
+                      <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A2BE2" stroke-width="2"><path d="M12 8v5l3 2"/><circle cx="12" cy="12" r="9"/></svg>
+                        <b style="font-size:13px">Последние события</b>
+                        <span style="margin-left:auto; background:#8A2BE2; color:#fff; font-size:10px; padding:1px 7px; border-radius:99px; font-weight:700">3</span>
+                      </div>
+                      <div style="font-size:11px; color:var(--grg-ink-300); display:flex; gap:6px; align-items:center"><span style="width:5px; height:5px; border-radius:99px; background:var(--grg-ink-400)"></span>Открытие двери · 14:32</div>
+                      <div style="font-size:11px; color:var(--grg-ink-300); margin-top:4px; display:flex; gap:6px; align-items:center"><span style="width:5px; height:5px; border-radius:99px; background:var(--grg-ink-400)"></span>Входящий вызов · 12:10</div>
+                    </div>
+                    <div class="flat" style="border-radius:14px; padding:10px; margin-bottom:10px">
+                      <div style="display:flex; gap:10px; align-items:center">
+                        <div class="icontile" style="background:rgba(138,43,226,.25); width:36px; height:36px; border-radius:10px">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A2BE2" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 9h16M8 4v16"/></svg>
+                        </div>
+                        <div>
+                          <div style="font-size:13px; font-weight:700">ЖК «Тверская 12»</div>
+                          <div style="font-size:11px; color:var(--grg-ink-300)">ул. Тверская, д.12</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="flat" style="border-radius:14px; padding:10px">
+                      <div style="display:flex; gap:10px; align-items:center">
+                        <div class="icontile" style="background:rgba(138,43,226,.25); width:36px; height:36px; border-radius:10px">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A2BE2" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 9h16M8 4v16"/></svg>
+                        </div>
+                        <div>
+                          <div style="font-size:13px; font-weight:700">Дача Барвиха</div>
+                          <div style="font-size:11px; color:var(--grg-ink-300)">СНТ «Озеро»</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- 2-tab tabbar -->
+                  <div class="tabbar" style="background: rgba(26,11,46,.35); border:1px solid rgba(138,43,226,.2)">
+                    <div class="tab active">
+                      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12L12 4l9 8M5 10v10h14V10"/></svg>
+                      Домофон
+                    </div>
+                    <div class="tab">
+                      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2.1-1.7-2-3.4-2.5.9a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.4a7 7 0 0 0-2 1.2l-2.5-.9-2 3.4 2.1 1.7A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2L3 14.9l2 3.4 2.5-.9c.6.5 1.3.9 2 1.2L10 21h4l.5-2.4c.7-.3 1.4-.7 2-1.2l2.5.9 2-3.4-2.1-1.7c.1-.4.1-.8.1-1.2z"/></svg>
+                      Настройки
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-note">
+              Профиль, События, Журнал открытий — только через «ныряние» в экраны. <code>ProfileScreen</code> недоступен из UI вообще.
+            </div>
+          </div>
+
+          <!-- AFTER: 4 tabs -->
+          <div class="col">
+            <div class="col-label after"><span class="pill">ПРЕДЛАГАЕТСЯ</span> 4 вкладки · настоящий glass</div>
+            <div class="stage">
+              <div class="phone">
+                <div class="notch"></div>
+                <div class="screen">
+                  <div class="status-bar">
+                    <span>9:41</span>
+                    <div class="icons">
+                      <svg width="14" height="10" viewBox="0 0 14 10" fill="none"><path d="M1 6L2 5.5C4 4.5 6 4.5 8 5.5L13 8" stroke="#fff" stroke-linecap="round"/><circle cx="3" cy="7" r="1" fill="#fff"/><circle cx="7" cy="6" r="1" fill="#fff"/><circle cx="11" cy="5" r="1" fill="#fff"/></svg>
+                      <div class="battery"><div class="lvl"></div></div>
+                    </div>
+                  </div>
+                  <div class="phone-body" style="padding:0 14px">
+                    <div style="padding:8px 4px 14px; display:flex; align-items:flex-end; justify-content:space-between">
+                      <div>
+                        <div style="font-size:11px; color:var(--grg-ink-300); text-transform:uppercase; letter-spacing:1.5px">Резидент</div>
+                        <div style="font-family:var(--grg-font-display); font-size:22px; font-weight:600; letter-spacing:-.01em; margin-top:2px">Добрый вечер,<br/>Иван</div>
+                      </div>
+                      <div style="width:34px; height:34px; border-radius:99px; background: linear-gradient(135deg, #8A2BE2, #5FA8FF); display:inline-flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:13px">ИП</div>
+                    </div>
+
+                    <!-- Prominent Open Door CTA (moved up) -->
+                    <div class="pcard" style="margin-bottom:10px; padding:14px; background: linear-gradient(135deg, rgba(138,43,226,.30), rgba(95,168,255,.12)); border-color: rgba(138,43,226,.45)">
+                      <div style="font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--grg-ink-200); margin-bottom:6px">Основной вход</div>
+                      <div style="display:flex; justify-content:space-between; align-items:flex-end">
+                        <div>
+                          <div style="font-size:15px; font-weight:700">Тверская 12, подъезд 2</div>
+                          <div style="font-size:11px; color:var(--grg-ink-200); margin-top:2px">Akuvox · онлайн</div>
+                        </div>
+                        <button style="background:#8A2BE2; color:#fff; border:none; padding:9px 16px; border-radius:99px; font-weight:700; font-size:12px; box-shadow: 0 8px 20px -6px rgba(138,43,226,.8)">Открыть</button>
+                      </div>
+                    </div>
+
+                    <!-- Recent events -->
+                    <div class="pcard" style="margin-bottom:10px; padding:12px">
+                      <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8A2BE2" stroke-width="2"><path d="M12 8v5l3 2"/><circle cx="12" cy="12" r="9"/></svg>
+                        <b style="font-size:13px">Последние события</b>
+                        <span style="margin-left:auto; background:#FF6B6B; color:#fff; font-size:10px; padding:1px 7px; border-radius:99px; font-weight:700">3</span>
+                      </div>
+                      <div style="display:flex; align-items:center; gap:9px; padding:6px 0">
+                        <div style="width:28px; height:28px; border-radius:8px; background:rgba(61,213,152,.18); display:inline-flex; align-items:center; justify-content:center">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3DD598" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/></svg>
+                        </div>
+                        <div style="flex:1"><div style="font-size:12px; font-weight:600">Открытие двери</div><div style="font-size:10.5px; color:var(--grg-ink-300)">14:32 · Основной вход</div></div>
+                      </div>
+                      <div style="display:flex; align-items:center; gap:9px; padding:6px 0; border-top:1px solid rgba(138,43,226,.15)">
+                        <div style="width:28px; height:28px; border-radius:8px; background:rgba(138,43,226,.2); display:inline-flex; align-items:center; justify-content:center">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8A2BE2" stroke-width="2"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1.8.3 1.6.6 2.4a2 2 0 0 1-.5 2.1L7.9 9.5a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.8.3 1.6.5 2.4.6a2 2 0 0 1 1.7 2z"/></svg>
+                        </div>
+                        <div style="flex:1"><div style="font-size:12px; font-weight:600">Входящий вызов</div><div style="font-size:10.5px; color:var(--grg-ink-300)">12:10 · не отвечен</div></div>
+                      </div>
+                    </div>
+
+                    <div class="pcard" style="padding:10px; display:flex; gap:10px; align-items:center">
+                      <div class="icontile" style="width:36px; height:36px; border-radius:10px">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 9h16M8 4v16"/></svg>
+                      </div>
+                      <div style="flex:1">
+                        <div style="font-size:13px; font-weight:700">Дача Барвиха</div>
+                        <div style="font-size:11px; color:var(--grg-ink-300)">СНТ «Озеро» · 2 устройства</div>
+                      </div>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--grg-ink-300)" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+                    </div>
+                  </div>
+
+                  <!-- 4-tab tabbar with REAL glass -->
+                  <div class="tabbar" style="background: rgba(26,11,46,.35); backdrop-filter: blur(14px); border:1px solid rgba(138,43,226,.35)">
+                    <div class="tab active">
+                      <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12L12 4l9 8v9h-6v-6h-6v6H3z"/></svg>
+                      Главная
+                    </div>
+                    <div class="tab">
+                      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+                      События
+                      <span class="badge">3</span>
+                    </div>
+                    <div class="tab">
+                      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/></svg>
+                      Управление
+                    </div>
+                    <div class="tab">
+                      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+                      Профиль
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-note">
+              Добавлена вкладка <b>События</b> с счётчиком непрочитанных и <b>Профиль</b> — ProfileScreen становится first-class. Основная CTA «Открыть» поднята в самый верх карточки здания.
+            </div>
+          </div>
+        </div>
+
+        <div class="legend">
+          <b>Что поменялось:</b>
+          <span><span class="green">▲ +2 вкладки</span> — События и Профиль</span>
+          <span><span class="green">▲ Приветствие</span> вместо технического заголовка</span>
+          <span><span class="green">▲ Primary CTA</span> «Открыть» на главной</span>
+          <span><span class="green">▲ Backdrop-filter blur</span> настоящий</span>
+          <span><span class="red">▼ ProfileScreen недоступен</span> — больше не проблема</span>
+        </div>
+      </section>
+
+      <!-- ============================================================= -->
+      <!--                    MOBILE — REAL GLASSMORPHISM                -->
+      <!-- ============================================================= -->
+      <section class="row" id="glass">
+        <div class="row-head">
+          <div>
+            <span class="tag">03 · Mobile · GlassCard</span>
+            <h3>Настоящий glassmorphism (наконец-то)</h3>
+            <p>В текущей реализации <code>GlassCard</code> — это просто полупрозрачный контейнер без <code>BackdropFilter</code>. Добавляем <code>ImageFilter.blur(sigmaX: 10, sigmaY: 10)</code> + тонкую подсветку сверху — и карточки оживают.</p>
+          </div>
+          <span class="chip-pill">PRIORITY 4 · MEDIUM</span>
+        </div>
+
+        <div class="sbs">
+          <div class="col">
+            <div class="col-label before"><span class="pill">СЕЙЧАС</span> просто полупрозрачный фон</div>
+            <div class="stage" style="min-height:360px">
+              <div style="position:relative; width:100%; max-width:420px">
+                <!-- Background blobs to prove blur -->
+                <div style="position:absolute; inset:0; border-radius:20px; background: radial-gradient(120px 120px at 25% 40%, #8A2BE2, transparent 70%), radial-gradient(160px 160px at 75% 60%, #5FA8FF, transparent 70%); filter: saturate(1.2)"></div>
+                <div style="position:relative; padding:24px">
+                  <div class="flat" style="border-radius:18px; padding:18px; display:flex; gap:14px; align-items:center">
+                    <div class="icontile" style="background: rgba(138,43,226,.25)">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/></svg>
+                    </div>
+                    <div>
+                      <h4>Управление дверью</h4>
+                      <small>Открыть дверь, просмотр камеры</small>
+                    </div>
+                  </div>
+                  <div class="flat" style="border-radius:18px; padding:18px; display:flex; gap:14px; align-items:center; margin-top:12px">
+                    <div class="icontile" style="background: rgba(138,43,226,.25)">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5l3 2"/></svg>
+                    </div>
+                    <div>
+                      <h4>Журнал открытий</h4>
+                      <small>История событий двери</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-note">
+              Фоновые блобы не размываются — «стекло» смотрится как плоская серая панель. Нет ощущения глубины.
+            </div>
+          </div>
+
+          <div class="col">
+            <div class="col-label after"><span class="pill">ПРЕДЛАГАЕТСЯ</span> BackdropFilter + highlight</div>
+            <div class="stage" style="min-height:360px">
+              <div style="position:relative; width:100%; max-width:420px">
+                <div style="position:absolute; inset:0; border-radius:20px; background: radial-gradient(120px 120px at 25% 40%, #8A2BE2, transparent 70%), radial-gradient(160px 160px at 75% 60%, #5FA8FF, transparent 70%); filter: saturate(1.2)"></div>
+                <div style="position:relative; padding:24px">
+                  <div class="grg-glass" style="padding:18px; display:flex; gap:14px; align-items:center; position:relative; overflow:hidden">
+                    <div style="position:absolute; inset:0 0 auto 0; height:1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent)"></div>
+                    <div class="icontile">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/></svg>
+                    </div>
+                    <div>
+                      <h4>Управление дверью</h4>
+                      <small>Открыть дверь, просмотр камеры</small>
+                    </div>
+                  </div>
+                  <div class="grg-glass" style="padding:18px; display:flex; gap:14px; align-items:center; margin-top:12px; position:relative; overflow:hidden">
+                    <div style="position:absolute; inset:0 0 auto 0; height:1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent)"></div>
+                    <div class="icontile">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5l3 2"/></svg>
+                    </div>
+                    <div>
+                      <h4>Журнал открытий</h4>
+                      <small>История событий двери</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-note">
+              Цвета фона читаются сквозь карточку, верх подсвечен — ощущение реального матового стекла. 10 строк кода в <code>GlassCard</code>.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================= -->
+      <!--                    MOBILE — SKELETON                          -->
+      <!-- ============================================================= -->
+      <section class="row" id="skeleton">
+        <div class="row-head">
+          <div>
+            <span class="tag">04 · Mobile · Loading</span>
+            <h3>Skeleton вместо центрального спиннера</h3>
+            <p>Сейчас при открытии списка зданий/устройств/событий — пустой экран с <code>CircularProgressIndicator</code>. Скелетоны показывают структуру будущего контента и делают загрузку ощутимо быстрее.</p>
+          </div>
+          <span class="chip-pill">PRIORITY 5 · MEDIUM</span>
+        </div>
+
+        <div class="sbs">
+          <div class="col">
+            <div class="col-label before"><span class="pill">СЕЙЧАС</span> CircularProgressIndicator</div>
+            <div class="stage">
+              <div class="phone">
+                <div class="notch"></div>
+                <div class="screen">
+                  <div class="status-bar"><span>9:41</span><div class="icons"><div class="battery"><div class="lvl"></div></div></div></div>
+                  <div class="phone-body" style="padding:0 14px; align-items:center; justify-content:center">
+                    <div style="display:flex; flex-direction:column; align-items:center; gap:16px">
+                      <div style="width:40px; height:40px; border-radius:99px; border:3px solid rgba(138,43,226,.25); border-top-color:#8A2BE2; animation: grg-spin 1s linear infinite"></div>
+                      <div style="font-size:12px; color:var(--grg-ink-300)">Загрузка…</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="col-label after"><span class="pill">ПРЕДЛАГАЕТСЯ</span> Skeleton shimmer</div>
+            <div class="stage">
+              <div class="phone">
+                <div class="notch"></div>
+                <div class="screen">
+                  <div class="status-bar"><span>9:41</span><div class="icons"><div class="battery"><div class="lvl"></div></div></div></div>
+                  <div class="phone-body" style="padding:0 14px">
+                    <div style="padding:8px 4px 14px">
+                      <div class="grg-skeleton" style="width:60%; height:14px; margin-bottom:6px"></div>
+                      <div class="grg-skeleton" style="width:40%; height:24px"></div>
+                    </div>
+                    <div class="grg-glass" style="padding:14px; margin-bottom:10px">
+                      <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px">
+                        <div class="grg-skeleton" style="width:16px; height:16px; border-radius:99px"></div>
+                        <div class="grg-skeleton" style="width:50%; height:12px"></div>
+                      </div>
+                      <div class="grg-skeleton" style="width:90%; height:10px; margin-bottom:6px"></div>
+                      <div class="grg-skeleton" style="width:70%; height:10px"></div>
+                    </div>
+                    <div class="grg-glass" style="padding:12px; margin-bottom:10px; display:flex; gap:10px; align-items:center">
+                      <div class="grg-skeleton" style="width:40px; height:40px; border-radius:12px"></div>
+                      <div style="flex:1">
+                        <div class="grg-skeleton" style="width:70%; height:13px; margin-bottom:6px"></div>
+                        <div class="grg-skeleton" style="width:55%; height:10px"></div>
+                      </div>
+                    </div>
+                    <div class="grg-glass" style="padding:12px; display:flex; gap:10px; align-items:center">
+                      <div class="grg-skeleton" style="width:40px; height:40px; border-radius:12px"></div>
+                      <div style="flex:1">
+                        <div class="grg-skeleton" style="width:60%; height:13px; margin-bottom:6px"></div>
+                        <div class="grg-skeleton" style="width:40%; height:10px"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <style>@keyframes grg-spin{to{transform:rotate(360deg)}}</style>
+        <div class="legend">
+          <b>Flutter реализация:</b> виджет <code>SkeletonCard</code> с <code>ShaderMask + LinearGradient</code> + <code>AnimationController</code>. Использовать в <code>_BackendHomeContent</code>, <code>_BuildingDevicesScreen</code>, <code>_AllEventsScreen</code>.
+        </div>
+      </section>
+
+      <!-- ============================================================= -->
+      <!--                    MOBILE — PROFILE SCREEN                    -->
+      <!-- ============================================================= -->
+      <section class="row" id="profile">
+        <div class="row-head">
+          <div>
+            <span class="tag">05 · Mobile · Profile</span>
+            <h3>ProfileScreen в единой системе</h3>
+            <p>Сейчас это просто <code>Scaffold</code> с белыми <code>TextField</code> и <code>Colors.red</code> — как из другого приложения. Возвращаем в мир GlassCard, AppColors и type scale.</p>
+          </div>
+          <span class="chip-pill">PRIORITY 2 · HIGH</span>
+        </div>
+
+        <div class="sbs">
+          <div class="col">
+            <div class="col-label before"><span class="pill">СЕЙЧАС</span> системный Material, не тот цвет</div>
+            <div class="stage">
+              <div class="phone">
+                <div class="notch"></div>
+                <div class="screen" style="background:#14082A">
+                  <div class="status-bar"><span>9:41</span><div class="icons"><div class="battery"><div class="lvl"></div></div></div></div>
+                  <div style="background:#1F0F3B; padding:14px 16px; display:flex; align-items:center; gap:10px; border-bottom:1px solid rgba(255,255,255,.08)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                    <div style="font-size:16px; font-weight:700">Профиль</div>
+                  </div>
+                  <div style="padding:16px; display:flex; flex-direction:column; gap:12px">
+                    <div>
+                      <div style="font-size:11px; color:#DACBF5; margin-bottom:6px">Имя</div>
+                      <div style="background:#fff; color:#000; padding:10px 12px; border-radius:6px; font-size:13px">Иван Петров</div>
+                    </div>
+                    <div>
+                      <div style="font-size:11px; color:#DACBF5; margin-bottom:6px">Email</div>
+                      <div style="background:#fff; color:#000; padding:10px 12px; border-radius:6px; font-size:13px"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="4b223d2a250b2e332a263b272e65282426">[email&#160;protected]</a></div>
+                    </div>
+                    <div>
+                      <div style="font-size:11px; color:#DACBF5; margin-bottom:6px">Телефон</div>
+                      <div style="background:#fff; color:#000; padding:10px 12px; border-radius:6px; font-size:13px">+7 999 000-00-00</div>
+                    </div>
+                    <button style="background:#8A2BE2; color:#fff; border:none; padding:12px; border-radius:8px; font-weight:700; font-size:13px; margin-top:4px">Сохранить профиль</button>
+                    <hr style="border:none; border-top:1px solid rgba(255,255,255,.15); margin:14px 0">
+                    <div style="font-size:14px; font-weight:700; color:#fff">Сменить пароль</div>
+                    <div style="color:red; font-size:12px; margin-top:-4px">Ошибка: неверный текущий пароль</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-note">
+              Белые инпуты, <code>Colors.red</code> (а не <code>AppColors.danger</code>), нет GlassCard. Экран выбивается даже из самой страницы.
+            </div>
+          </div>
+          <div class="col">
+            <div class="col-label after"><span class="pill">ПРЕДЛАГАЕТСЯ</span> Glass + hero + токены</div>
+            <div class="stage">
+              <div class="phone">
+                <div class="notch"></div>
+                <div class="screen">
+                  <div class="status-bar"><span>9:41</span><div class="icons"><div class="battery"><div class="lvl"></div></div></div></div>
+                  <div class="phone-body" style="padding:0 14px">
+                    <div style="padding:4px; display:flex; align-items:center; gap:8px">
+                      <div style="width:30px; height:30px; border-radius:99px; background: rgba(138,43,226,.2); display:inline-flex; align-items:center; justify-content:center">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A6FF" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                      </div>
+                      <div style="font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--grg-ink-300)">Профиль</div>
+                    </div>
+
+                    <!-- Hero -->
+                    <div class="pcard" style="margin-top:10px; padding:18px; text-align:center; background: linear-gradient(160deg, rgba(138,43,226,.30), rgba(26,11,46,.30))">
+                      <div style="width:66px; height:66px; border-radius:99px; margin: 0 auto 10px; background: linear-gradient(135deg, #8A2BE2, #5FA8FF); display:inline-flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:22px; font-family: var(--grg-font-display)">ИП</div>
+                      <div style="font-family:var(--grg-font-display); font-size:18px; font-weight:600">Иван Петров</div>
+                      <div style="font-size:11px; color:var(--grg-ink-200); margin-top:2px">Резидент · с 12 марта 2024</div>
+                    </div>
+
+                    <!-- Sections -->
+                    <div class="pcard" style="margin-top:10px; padding:4px 0">
+                      <div style="display:flex; align-items:center; gap:12px; padding:12px 14px; border-bottom:1px solid rgba(138,43,226,.15)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9A6FF" stroke-width="2"><path d="M4 6h16v12H4z"/><path d="M4 7l8 6 8-6"/></svg>
+                        <div style="flex:1">
+                          <div style="font-size:10.5px; color:var(--grg-ink-300)">Email</div>
+                          <div style="font-size:13px; font-weight:600"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="771e01161937120f161a071b125914181a">[email&#160;protected]</a></div>
+                        </div>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--grg-ink-300)" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+                      </div>
+                      <div style="display:flex; align-items:center; gap:12px; padding:12px 14px; border-bottom:1px solid rgba(138,43,226,.15)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9A6FF" stroke-width="2"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1.8.3 1.6.6 2.4a2 2 0 0 1-.5 2.1L7.9 9.5a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.8.3 1.6.5 2.4.6a2 2 0 0 1 1.7 2z"/></svg>
+                        <div style="flex:1">
+                          <div style="font-size:10.5px; color:var(--grg-ink-300)">Телефон</div>
+                          <div style="font-size:13px; font-weight:600">+7 999 000-00-00</div>
+                        </div>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--grg-ink-300)" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+                      </div>
+                      <div style="display:flex; align-items:center; gap:12px; padding:12px 14px">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9A6FF" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/></svg>
+                        <div style="flex:1">
+                          <div style="font-size:10.5px; color:var(--grg-ink-300)">Пароль</div>
+                          <div style="font-size:13px; font-weight:600">Изменён 3 месяца назад</div>
+                        </div>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--grg-ink-300)" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+                      </div>
+                    </div>
+
+                    <!-- Danger zone with proper danger color -->
+                    <div class="pcard" style="margin-top:10px; padding:0; border-color: rgba(255,107,107,.25)">
+                      <div style="display:flex; align-items:center; gap:12px; padding:12px 14px">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+                        <div style="flex:1; font-size:13px; font-weight:600; color:#FF9CB1">Выйти из аккаунта</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-note">
+              Hero-шапка с аватаром, секции через <code>ListTile</code> в <code>GlassCard</code>, danger-zone отдельной карточкой с <code>AppColors.danger</code> вместо <code>Colors.red</code>.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================= -->
+      <!--                    MOBILE — INCOMING CALL                     -->
+      <!-- ============================================================= -->
+      <section class="row" id="incoming">
+        <div class="row-head">
+          <div>
+            <span class="tag">06 · Mobile · Incoming Call</span>
+            <h3>Приоритизируем «Открыть» — главное действие сцены</h3>
+            <p>Три равноценные иконки (Сбросить · Открыть · Ответить) сейчас не подсказывают, что нажимать. У жильца в 80% случаев одна задача — открыть. Делаем её визуально доминирующей: большая primary-кнопка 80×80 по центру, остальные — меньше.</p>
+          </div>
+          <span class="chip-pill">PRIORITY 3 · HIGH</span>
+        </div>
+
+        <div class="sbs">
+          <div class="col">
+            <div class="col-label before"><span class="pill">СЕЙЧАС</span> три равных кнопки</div>
+            <div class="stage">
+              <div class="phone">
+                <div class="notch"></div>
+                <div class="screen" style="background:#0A0418">
+                  <div class="status-bar"><span>9:41</span><div class="icons"><div class="battery"><div class="lvl"></div></div></div></div>
+                  <div class="phone-body">
+                    <div style="padding:14px 16px; display:flex; gap:10px; align-items:center">
+                      <div style="width:40px; height:40px; border-radius:12px; background:rgba(138,43,226,.25); display:inline-flex; align-items:center; justify-content:center">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8A2BE2" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 9h16M8 4v16"/></svg>
+                      </div>
+                      <div>
+                        <div style="font-size:18px; font-weight:700">Входящий звонок</div>
+                        <div style="font-size:12px; color:rgba(255,255,255,.7)">Тверская 12 · кв. 42</div>
+                      </div>
+                    </div>
+                    <div style="flex:1; background:#000; margin:4px 14px; border-radius:12px; display:flex; align-items:center; justify-content:center; position:relative; overflow:hidden">
+                      <!-- fake video preview -->
+                      <div style="position:absolute; inset:0; background: radial-gradient(400px 220px at 50% 40%, rgba(138,43,226,.25), transparent 70%), #0B0320"></div>
+                      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="1.5" style="position:relative"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                      <div style="position:absolute; top:10px; left:10px; background:rgba(255,107,107,.9); color:#fff; font-size:10px; font-weight:700; padding:3px 8px; border-radius:99px; display:flex; align-items:center; gap:4px">
+                        <span style="width:6px; height:6px; border-radius:99px; background:#fff; animation: grg-pulse 1.5s infinite"></span>LIVE
+                      </div>
+                    </div>
+                    <div style="padding:22px; display:flex; justify-content:space-evenly; align-items:center">
+                      <div style="display:flex; flex-direction:column; align-items:center; gap:6px">
+                        <button style="width:54px; height:54px; border-radius:99px; border:none; background: rgba(255,107,107,.3); color:#FF6B6B; display:inline-flex; align-items:center; justify-content:center">
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15.46l-5.27-.61-2.52 2.52a15.9 15.9 0 0 1-7.58-7.58l2.53-2.53L7.54 2H3a17 17 0 0 0 19 19z" transform="rotate(135 12 12)"/></svg>
+                        </button>
+                        <span style="font-size:10.5px; color:#FF6B6B">Сбросить</span>
+                      </div>
+                      <div style="display:flex; flex-direction:column; align-items:center; gap:6px">
+                        <button style="width:54px; height:54px; border-radius:99px; border:none; background: rgba(61,213,152,.3); color:#3DD598; display:inline-flex; align-items:center; justify-content:center">
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/></svg>
+                        </button>
+                        <span style="font-size:10.5px; color:#3DD598">Открыть</span>
+                      </div>
+                      <div style="display:flex; flex-direction:column; align-items:center; gap:6px">
+                        <button style="width:54px; height:54px; border-radius:99px; border:none; background: rgba(138,43,226,.3); color:#8A2BE2; display:inline-flex; align-items:center; justify-content:center">
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 11l5-3v8l-5-3z"/></svg>
+                        </button>
+                        <span style="font-size:10.5px; color:#8A2BE2">Ответить</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-note">
+              Все три кнопки 54×54 равноценны. «…» в лоадинге вместо спиннера. Пользователь сканирует по иконкам, а не по приоритету.
+            </div>
+          </div>
+          <div class="col">
+            <div class="col-label after"><span class="pill">ПРЕДЛАГАЕТСЯ</span> primary «Открыть» 84×84</div>
+            <div class="stage">
+              <div class="phone">
+                <div class="notch"></div>
+                <div class="screen" style="background:#0A0418">
+                  <div class="status-bar"><span>9:41</span><div class="icons"><div class="battery"><div class="lvl"></div></div></div></div>
+                  <div class="phone-body">
+                    <div style="padding:14px 16px; display:flex; gap:10px; align-items:center">
+                      <div style="width:40px; height:40px; border-radius:12px; background: linear-gradient(135deg, #8A2BE2, #5FA8FF); display:inline-flex; align-items:center; justify-content:center">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 9h16M8 4v16"/></svg>
+                      </div>
+                      <div>
+                        <div style="font-size:11px; color:rgba(255,255,255,.7); letter-spacing:1.5px; text-transform:uppercase">Входящий</div>
+                        <div style="font-family: var(--grg-font-display); font-size:18px; font-weight:600; letter-spacing:-.01em">Тверская 12 · кв. 42</div>
+                      </div>
+                    </div>
+                    <div style="flex:1; background:#000; margin:4px 14px; border-radius:16px; display:flex; align-items:center; justify-content:center; position:relative; overflow:hidden">
+                      <div style="position:absolute; inset:0; background: radial-gradient(400px 220px at 50% 40%, rgba(138,43,226,.3), transparent 70%), #0B0320"></div>
+                      <div style="position:absolute; inset:0; background: linear-gradient(0deg, rgba(0,0,0,.7), transparent 50%)"></div>
+                      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.5" style="position:relative"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                      <div style="position:absolute; top:10px; left:10px; background:rgba(255,107,107,.95); color:#fff; font-size:10px; font-weight:700; padding:3px 8px; border-radius:99px; display:flex; align-items:center; gap:4px">
+                        <span style="width:6px; height:6px; border-radius:99px; background:#fff; animation: grg-pulse 1.5s infinite"></span>LIVE
+                      </div>
+                      <div style="position:absolute; bottom:10px; left:10px; right:10px; font-size:11px; color:rgba(255,255,255,.75); display:flex; justify-content:space-between">
+                        <span>Akuvox R20</span>
+                        <span>0:12</span>
+                      </div>
+                    </div>
+                    <!-- New action layout: secondary — PRIMARY — secondary -->
+                    <div style="padding:16px 24px 24px; display:flex; justify-content:space-between; align-items:center">
+                      <div style="display:flex; flex-direction:column; align-items:center; gap:6px">
+                        <button style="width:56px; height:56px; border-radius:99px; border:none; background: rgba(255,107,107,.2); color:#FF6B6B; display:inline-flex; align-items:center; justify-content:center; backdrop-filter: blur(10px)">
+                          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15.46l-5.27-.61-2.52 2.52a15.9 15.9 0 0 1-7.58-7.58l2.53-2.53L7.54 2H3a17 17 0 0 0 19 19z" transform="rotate(135 12 12)"/></svg>
+                        </button>
+                        <span style="font-size:10.5px; color:#FF9CB1">Сбросить</span>
+                      </div>
+                      <!-- PRIMARY: Open door -->
+                      <div style="display:flex; flex-direction:column; align-items:center; gap:8px">
+                        <button style="
+                          width:84px; height:84px; border-radius:99px; border:none;
+                          background: linear-gradient(160deg, #52E5B8 0%, #3DD598 70%);
+                          color:#06281D; display:inline-flex; align-items:center; justify-content:center;
+                          box-shadow: 0 0 0 8px rgba(61,213,152,.18), 0 14px 30px -8px rgba(61,213,152,.5);
+                          position:relative;
+                        ">
+                          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0"/><circle cx="12" cy="16" r="1.5" fill="currentColor"/></svg>
+                        </button>
+                        <span style="font-size:12px; color:#A7FFD6; font-weight:700; letter-spacing:.3px">Открыть дверь</span>
+                      </div>
+                      <div style="display:flex; flex-direction:column; align-items:center; gap:6px">
+                        <button style="width:56px; height:56px; border-radius:99px; border:none; background: rgba(138,43,226,.25); color:#C9A6FF; display:inline-flex; align-items:center; justify-content:center; backdrop-filter: blur(10px)">
+                          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 11l5-3v8l-5-3z"/></svg>
+                        </button>
+                        <span style="font-size:10.5px; color:#C9A6FF">Ответить</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-note">
+              Primary «Открыть» 84×84 с pulse-halo, явная иерархия: сбросить &lt; ответить &lt; <b>ОТКРЫТЬ</b>. Таймер и имя устройства на предпросмотре.
+            </div>
+          </div>
+        </div>
+        <style>@keyframes grg-pulse{0%,100%{opacity:1}50%{opacity:.3}}</style>
+      </section>
+
+      <!-- ============================================================= -->
+      <!--                    ADMIN — WEB                                -->
+      <!-- ============================================================= -->
+      <section class="row" id="admin">
+        <div class="row-head">
+          <div>
+            <span class="tag">07 · Web Admin · admin.html</span>
+            <h3>Веб-админка: сайдбар, шрифт, токены</h3>
+            <p>Сейчас 8 вкладок горизонтально, <code>JetBrains Mono</code> для всего UI и свой оттенок фиолетового. Переезжаем на те же токены, что и Flutter-приложение, — единый бренд.</p>
+          </div>
+          <span class="chip-pill">PRIORITY 6–8 · HIGH</span>
+        </div>
+
+        <!-- BEFORE -->
+        <div class="col-label before" style="margin-bottom:10px"><span class="pill">СЕЙЧАС</span> horizontal tabs · monospace UI</div>
+        <div class="stage desktop">
+          <div class="desktop-frame" style="background:#0f0f12; max-width:1080px">
+            <div class="titlebar">
+              <div class="dot" style="background:#FF6B6B"></div>
+              <div class="dot" style="background:#F6C344"></div>
+              <div class="dot" style="background:#3DD598"></div>
+              <div style="flex:1; text-align:center; font-family: 'JetBrains Mono', monospace; font-size:12px; color:#71717a">localhost:3000/api/admin</div>
+            </div>
+            <div style="padding:20px; font-family: 'JetBrains Mono', monospace; font-size:12px; color:#e4e4e7">
+              <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:14px; border-bottom:1px solid #2a2a30; margin-bottom:16px">
+                <div style="font-family:'Unbounded', sans-serif; font-size:16px; color:#a78bfa">Doorphone Backend</div>
+                <div style="display:flex; gap:12px; font-size:11px"><a style="color:#a78bfa">Swagger API</a><span style="color:#71717a"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="bfdedbd2d6d1ffdac7ded2cfd3da91dcd0d2">[email&#160;protected]</a></span><span style="border:1px solid #2a2a30; padding:3px 8px; border-radius:4px">📖 Туториал</span><span style="border:1px solid #2a2a30; padding:3px 8px; border-radius:4px">Выйти</span></div>
+              </div>
+              <div style="background:#18181c; border:1px solid #2a2a30; border-radius:8px; padding:16px; margin-bottom:12px">
+                <div style="color:#71717a; font-size:11px; margin-bottom:10px">Данные</div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px">
+                  <div style="background:#7c3aed; color:#fff; padding:6px 12px; border-radius:6px; font-size:11px">Организации</div>
+                  <div style="background:#2a2a30; padding:6px 12px; border-radius:6px; font-size:11px">ЖК</div>
+                  <div style="background:#2a2a30; padding:6px 12px; border-radius:6px; font-size:11px">Здания</div>
+                  <div style="background:#2a2a30; padding:6px 12px; border-radius:6px; font-size:11px">Квартиры</div>
+                  <div style="background:#2a2a30; padding:6px 12px; border-radius:6px; font-size:11px">Жители</div>
+                  <div style="background:#2a2a30; padding:6px 12px; border-radius:6px; font-size:11px">Пользователи</div>
+                  <div style="background:#2a2a30; padding:6px 12px; border-radius:6px; font-size:11px">Устройства</div>
+                  <div style="background:#2a2a30; padding:6px 12px; border-radius:6px; font-size:11px">Заявки</div>
+                </div>
+                <table style="width:100%; border-collapse:collapse; font-size:11px">
+                  <thead><tr style="color:#71717a"><th style="text-align:left; padding:8px 10px; border-bottom:1px solid #2a2a30">Имя</th><th style="text-align:left; padding:8px 10px; border-bottom:1px solid #2a2a30">UUID</th><th style="text-align:left; padding:8px 10px; border-bottom:1px solid #2a2a30">Создана</th><th style="text-align:left; padding:8px 10px; border-bottom:1px solid #2a2a30">Действия</th></tr></thead>
+                  <tbody>
+                    <tr><td style="padding:8px 10px; border-bottom:1px solid #2a2a30">УК Альфа</td><td style="padding:8px 10px; border-bottom:1px solid #2a2a30; color:#71717a">9a4f-8b12</td><td style="padding:8px 10px; border-bottom:1px solid #2a2a30">2025-03-11</td><td style="padding:8px 10px; border-bottom:1px solid #2a2a30"><a>Открыть</a> · <a>Изменить</a> · <a>Удалить</a></td></tr>
+                    <tr><td style="padding:8px 10px; border-bottom:1px solid #2a2a30">УК Бета</td><td style="padding:8px 10px; border-bottom:1px solid #2a2a30; color:#71717a">1c7e-2311</td><td style="padding:8px 10px; border-bottom:1px solid #2a2a30">2024-11-02</td><td style="padding:8px 10px; border-bottom:1px solid #2a2a30"><a>Открыть</a> · <a>Изменить</a> · <a>Удалить</a></td></tr>
+                    <tr><td style="padding:8px 10px">УК Гамма</td><td style="padding:8px 10px; color:#71717a">3e44-92f0</td><td style="padding:8px 10px">2025-06-20</td><td style="padding:8px 10px"><a>Открыть</a> · <a>Изменить</a> · <a>Удалить</a></td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div style="color:#71717a; font-size:11px">GET /api/organizations</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-note" style="margin-top:12px">
+          8 вкладок теснятся и переносятся на узком экране. Шрифт <code>JetBrains Mono</code> в таблицах даёт ощущение дев-консоли, а не продукта.
+        </div>
+
+        <!-- AFTER -->
+        <div class="col-label after" style="margin-top:36px; margin-bottom:10px"><span class="pill">ПРЕДЛАГАЕТСЯ</span> sidebar · Manrope · общий purple/500</div>
+        <div class="stage desktop">
+          <div class="desktop-frame" style="max-width:1080px; background: #0E061A">
+            <div class="titlebar" style="background: rgba(20,8,42,.7); border-bottom-color: var(--grg-glass-border)">
+              <div class="dot" style="background:#FF6B6B"></div>
+              <div class="dot" style="background:#F6C344"></div>
+              <div class="dot" style="background:#3DD598"></div>
+              <div style="flex:1; text-align:center; font-family: var(--grg-font-mono); font-size:12px; color:var(--grg-ink-300)">grg-admin.local</div>
+            </div>
+            <div class="body" style="grid-template-columns: 220px 1fr">
+              <!-- Sidebar -->
+              <aside style="background: rgba(14,6,26,.6); border-right:1px solid var(--grg-glass-border); padding:18px 14px; display:flex; flex-direction:column; gap:2px; backdrop-filter: blur(14px)">
+                <div style="display:flex; align-items:center; gap:10px; padding:4px 6px 14px">
+                  <div style="width:28px; height:28px; border-radius:8px; background: conic-gradient(from 210deg, #8A2BE2, #5FA8FF, #8A2BE2); position:relative">
+                    <div style="position:absolute; inset:4px; border-radius:5px; background:#0E061A"></div>
+                    <div style="position:absolute; inset:8px; border-radius:2px; background: linear-gradient(180deg, #8A2BE2, #5FA8FF)"></div>
+                  </div>
+                  <div style="font-family: var(--grg-font-display); font-weight:600; font-size:14px">GRG&nbsp;Admin</div>
+                </div>
+                <div style="font-size:10px; letter-spacing:1.8px; text-transform:uppercase; color:var(--grg-ink-400); padding:12px 8px 4px">Структура</div>
+                <a style="display:flex; align-items:center; gap:10px; padding:8px; border-radius:10px; font-size:13px; color:var(--grg-ink-200)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></svg>Дашборд</a>
+                <a style="display:flex; align-items:center; gap:10px; padding:8px; border-radius:10px; font-size:13px; background: rgba(138,43,226,.22); color:#fff; font-weight:600"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V8l7-5 7 5v13M10 21v-5h4v5"/></svg>Организации<span style="margin-left:auto; font-family:var(--grg-font-mono); font-size:10px; background:rgba(138,43,226,.35); padding:1px 6px; border-radius:99px">3</span></a>
+                <a style="display:flex; align-items:center; gap:10px; padding:8px; border-radius:10px; font-size:13px; color:var(--grg-ink-200); margin-left:10px"><span style="width:4px; height:4px; border-radius:99px; background:var(--grg-ink-400)"></span>ЖК</a>
+                <a style="display:flex; align-items:center; gap:10px; padding:8px; border-radius:10px; font-size:13px; color:var(--grg-ink-200); margin-left:10px"><span style="width:4px; height:4px; border-radius:99px; background:var(--grg-ink-400)"></span>Здания</a>
+                <a style="display:flex; align-items:center; gap:10px; padding:8px; border-radius:10px; font-size:13px; color:var(--grg-ink-200); margin-left:10px"><span style="width:4px; height:4px; border-radius:99px; background:var(--grg-ink-400)"></span>Квартиры</a>
+
+                <div style="font-size:10px; letter-spacing:1.8px; text-transform:uppercase; color:var(--grg-ink-400); padding:12px 8px 4px">Люди</div>
+                <a style="display:flex; align-items:center; gap:10px; padding:8px; border-radius:10px; font-size:13px; color:var(--grg-ink-200)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Жители</a>
+                <a style="display:flex; align-items:center; gap:10px; padding:8px; border-radius:10px; font-size:13px; color:var(--grg-ink-200)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M1 21a8 8 0 0 1 16 0M17 11l3 3 5-5"/></svg>Пользователи</a>
+                <a style="display:flex; align-items:center; gap:10px; padding:8px; border-radius:10px; font-size:13px; color:var(--grg-ink-200)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Заявки<span style="margin-left:auto; background:#FF6B6B; color:#fff; font-size:10px; padding:1px 7px; border-radius:99px; font-weight:700">5</span></a>
+
+                <div style="font-size:10px; letter-spacing:1.8px; text-transform:uppercase; color:var(--grg-ink-400); padding:12px 8px 4px">Инфра</div>
+                <a style="display:flex; align-items:center; gap:10px; padding:8px; border-radius:10px; font-size:13px; color:var(--grg-ink-200)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v16M4 8h4"/></svg>Устройства</a>
+
+                <div style="margin-top:auto; padding:10px 8px; display:flex; align-items:center; gap:10px; border-top:1px solid var(--grg-glass-border)">
+                  <div style="width:28px; height:28px; border-radius:99px; background:linear-gradient(135deg,#8A2BE2,#5FA8FF); color:#fff; font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center">АП</div>
+                  <div style="flex:1"><div style="font-size:12px; font-weight:600">Анна Петрова</div><div style="font-size:10px; color:var(--grg-ink-300); font-family:var(--grg-font-mono)">SUPER_ADMIN</div></div>
+                </div>
+              </aside>
+
+              <!-- Main content -->
+              <main style="padding:22px 28px">
+                <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:20px">
+                  <div>
+                    <div style="font-family:var(--grg-font-mono); font-size:10.5px; letter-spacing:2px; text-transform:uppercase; color:var(--grg-purple-300)">Структура · Организации</div>
+                    <h4 style="font-family:var(--grg-font-display); font-size:24px; font-weight:600; margin:4px 0 0; letter-spacing:-.01em">Управляющие компании</h4>
+                  </div>
+                  <button style="background: var(--grg-purple-500); color:#fff; border:none; padding:9px 16px; border-radius:10px; font-family: var(--grg-font-sans); font-weight:600; font-size:13px; display:inline-flex; align-items:center; gap:6px">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                    Добавить УК
+                  </button>
+                </div>
+
+                <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-bottom:18px">
+                  <div class="grg-glass" style="padding:14px"><div style="font-family:var(--grg-font-mono); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--grg-ink-300)">Всего УК</div><div style="font-family:var(--grg-font-display); font-size:24px; font-weight:600; margin-top:4px">12</div></div>
+                  <div class="grg-glass" style="padding:14px"><div style="font-family:var(--grg-font-mono); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--grg-ink-300)">Активных заявок</div><div style="font-family:var(--grg-font-display); font-size:24px; font-weight:600; margin-top:4px; color:#FF9CB1">5</div></div>
+                  <div class="grg-glass" style="padding:14px"><div style="font-family:var(--grg-font-mono); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--grg-ink-300)">Устройств онлайн</div><div style="font-family:var(--grg-font-display); font-size:24px; font-weight:600; margin-top:4px; color:#A7FFD6">87<span style="color:var(--grg-ink-300); font-size:14px; font-weight:500">/92</span></div></div>
+                </div>
+
+                <div class="grg-glass" style="padding:0; overflow:hidden">
+                  <div style="display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--grg-glass-border)">
+                    <div style="flex:1; display:flex; align-items:center; gap:8px; background: rgba(14,6,26,.6); border:1px solid var(--grg-glass-border); border-radius:8px; padding:6px 10px">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--grg-ink-300)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+                      <input placeholder="Поиск по названию или ИНН…" style="background:transparent; border:none; color:#fff; font-family:var(--grg-font-sans); font-size:13px; outline:none; flex:1"/>
+                      <span style="font-family:var(--grg-font-mono); font-size:10.5px; color:var(--grg-ink-400); padding:2px 6px; border:1px solid var(--grg-glass-border); border-radius:4px">⌘K</span>
+                    </div>
+                    <button style="background: var(--grg-glass-strong); color:var(--grg-ink-200); border:1px solid var(--grg-glass-border); padding:6px 12px; border-radius:8px; font-size:12px; font-family: var(--grg-font-sans)">Фильтр</button>
+                  </div>
+                  <table style="width:100%; border-collapse:collapse; font-family: var(--grg-font-sans); font-size:13px">
+                    <thead>
+                      <tr style="color:var(--grg-ink-300); text-align:left; background:rgba(138,43,226,.06)">
+                        <th style="padding:10px 16px; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; font-weight:500">Название</th>
+                        <th style="padding:10px 16px; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; font-weight:500">ID</th>
+                        <th style="padding:10px 16px; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; font-weight:500">ЖК</th>
+                        <th style="padding:10px 16px; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; font-weight:500">Создана</th>
+                        <th style="padding:10px 16px"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr style="border-top:1px solid var(--grg-glass-border)">
+                        <td style="padding:12px 16px"><div style="display:flex; gap:10px; align-items:center"><div style="width:28px; height:28px; border-radius:8px; background:linear-gradient(135deg,#8A2BE2,#5FA8FF); display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700">УА</div><div><div style="font-weight:600">УК Альфа</div><div style="font-size:11px; color:var(--grg-ink-300)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="caaba6baa2ab8abfa1e4b8bf">[email&#160;protected]</a></div></div></div></td>
+                        <td style="padding:12px 16px; font-family: var(--grg-font-mono); font-size:12px; color:var(--grg-ink-300)">9a4f-8b12</td>
+                        <td style="padding:12px 16px">4</td>
+                        <td style="padding:12px 16px; color:var(--grg-ink-200)">11 марта 2025</td>
+                        <td style="padding:12px 16px; text-align:right"><div style="display:inline-flex; gap:6px">
+                          <button style="background:transparent; border:1px solid var(--grg-glass-border); color:var(--grg-ink-200); padding:4px 10px; border-radius:8px; font-size:12px">Открыть</button>
+                          <button style="background:transparent; border:1px solid var(--grg-glass-border); color:var(--grg-ink-200); padding:4px 8px; border-radius:8px; font-size:12px">⋯</button>
+                        </div></td>
+                      </tr>
+                      <tr style="border-top:1px solid var(--grg-glass-border)">
+                        <td style="padding:12px 16px"><div style="display:flex; gap:10px; align-items:center"><div style="width:28px; height:28px; border-radius:8px; background:linear-gradient(135deg,#F6C344,#FF6B6B); display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700">УБ</div><div><div style="font-weight:600">УК Бета</div><div style="font-size:11px; color:var(--grg-ink-300)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="147671607554617f3a6661">[email&#160;protected]</a></div></div></div></td>
+                        <td style="padding:12px 16px; font-family: var(--grg-font-mono); font-size:12px; color:var(--grg-ink-300)">1c7e-2311</td>
+                        <td style="padding:12px 16px">7</td>
+                        <td style="padding:12px 16px; color:var(--grg-ink-200)">2 ноября 2024</td>
+                        <td style="padding:12px 16px; text-align:right"><div style="display:inline-flex; gap:6px">
+                          <button style="background:transparent; border:1px solid var(--grg-glass-border); color:var(--grg-ink-200); padding:4px 10px; border-radius:8px; font-size:12px">Открыть</button>
+                          <button style="background:transparent; border:1px solid var(--grg-glass-border); color:var(--grg-ink-200); padding:4px 8px; border-radius:8px; font-size:12px">⋯</button>
+                        </div></td>
+                      </tr>
+                      <tr style="border-top:1px solid var(--grg-glass-border)">
+                        <td style="padding:12px 16px"><div style="display:flex; gap:10px; align-items:center"><div style="width:28px; height:28px; border-radius:8px; background:linear-gradient(135deg,#3DD598,#5FA8FF); display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700">УГ</div><div><div style="font-weight:600">УК Гамма</div><div style="font-size:11px; color:var(--grg-ink-300)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="e48385898985a4918fca9691">[email&#160;protected]</a></div></div></div></td>
+                        <td style="padding:12px 16px; font-family: var(--grg-font-mono); font-size:12px; color:var(--grg-ink-300)">3e44-92f0</td>
+                        <td style="padding:12px 16px">1</td>
+                        <td style="padding:12px 16px; color:var(--grg-ink-200)">20 июня 2025</td>
+                        <td style="padding:12px 16px; text-align:right"><div style="display:inline-flex; gap:6px">
+                          <button style="background:transparent; border:1px solid var(--grg-glass-border); color:var(--grg-ink-200); padding:4px 10px; border-radius:8px; font-size:12px">Открыть</button>
+                          <button style="background:transparent; border:1px solid var(--grg-glass-border); color:var(--grg-ink-200); padding:4px 8px; border-radius:8px; font-size:12px">⋯</button>
+                        </div></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div style="padding:10px 16px; display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--grg-glass-border); font-size:12px; color:var(--grg-ink-300)">
+                    <span>Показано 1–3 из 12</span>
+                    <span style="font-family: var(--grg-font-mono); color: var(--grg-purple-300)">GET /api/organizations</span>
+                  </div>
+                </div>
+              </main>
+            </div>
+          </div>
+        </div>
+        <div class="legend">
+          <b>Что поменялось:</b>
+          <span><span class="green">▲ Vertical sidebar</span> вместо 8 горизонтальных табов с группами «Структура / Люди / Инфра»</span>
+          <span><span class="green">▲ Manrope</span> для UI, mono остаётся для кода и UUID</span>
+          <span><span class="green">▲ Токены унифицированы</span> с Flutter: purple/500, danger, success</span>
+          <span><span class="green">▲ KPI-блоки + поиск</span> делают таблицу первичным экраном</span>
+        </div>
+      </section>
+
+      <!-- ============================================================= -->
+      <!--                    SUMMARY / NEXT STEPS                       -->
+      <!-- ============================================================= -->
+      <section class="row" id="summary">
+        <div class="row-head">
+          <div>
+            <span class="tag">Итого</span>
+            <h3>Что делаем дальше</h3>
+            <p>Порядок дорожной карты — от безрискового (переиспользовать существующий код) к более инвазивному (рефактор навигации и админки).</p>
+          </div>
+        </div>
+
+        <div class="tokens-grid" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
+          <div class="grg-glass" style="padding:18px">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px">
+              <span style="font-family:var(--grg-font-mono); font-size:11px; color:var(--grg-purple-300); letter-spacing:1.5px">W1 · Quick wins</span>
+            </div>
+            <h4 style="margin:0 0 8px; font-family:var(--grg-font-display); font-size:18px">Быстрые правки · 1–2 дня</h4>
+            <ul style="margin:0; padding-left:18px; color:var(--grg-ink-200); font-size:13px; line-height:1.7">
+              <li>Добавить <code>BackdropFilter</code> в <code>GlassCard</code></li>
+              <li><code>Colors.red</code> → <code>AppColors.danger</code> в ProfileScreen</li>
+              <li>Padding в <code>_BuildingCard</code> 4 → 16</li>
+              <li>Иконки событий по типу вместо <code>Icons.circle size: 8</code></li>
+              <li><code>'...'</code> → <code>CircularProgressIndicator</code> в Incoming Call</li>
+            </ul>
+          </div>
+
+          <div class="grg-glass" style="padding:18px">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px">
+              <span style="font-family:var(--grg-font-mono); font-size:11px; color:var(--grg-purple-300); letter-spacing:1.5px">W2 · Foundations</span>
+            </div>
+            <h4 style="margin:0 0 8px; font-family:var(--grg-font-display); font-size:18px">Основы · 3–5 дней</h4>
+            <ul style="margin:0; padding-left:18px; color:var(--grg-ink-200); font-size:13px; line-height:1.7">
+              <li>Создать <code>design-tokens.json</code> и генератор для Dart + CSS</li>
+              <li><code>AppTextStyles</code> с <code>headingL / bodyM / labelS</code></li>
+              <li>Виджет <code>SkeletonCard</code> и замена спиннеров</li>
+              <li>ProfileScreen на <code>GlassCard</code> + hero-шапка</li>
+            </ul>
+          </div>
+
+          <div class="grg-glass" style="padding:18px">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px">
+              <span style="font-family:var(--grg-font-mono); font-size:11px; color:var(--grg-purple-300); letter-spacing:1.5px">W3 · Structure</span>
+            </div>
+            <h4 style="margin:0 0 8px; font-family:var(--grg-font-display); font-size:18px">Навигация · 5–7 дней</h4>
+            <ul style="margin:0; padding-left:18px; color:var(--grg-ink-200); font-size:13px; line-height:1.7">
+              <li><code>MainShell</code>: 4 вкладки (Главная · События · Управление · Профиль)</li>
+              <li>Вынести логику списка событий в свой экран</li>
+              <li>Incoming Call: primary 84×84 «Открыть» с pulse</li>
+              <li>Приветствие с именем + аватар на главной</li>
+            </ul>
+          </div>
+
+          <div class="grg-glass" style="padding:18px">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px">
+              <span style="font-family:var(--grg-font-mono); font-size:11px; color:var(--grg-purple-300); letter-spacing:1.5px">W4 · Admin</span>
+            </div>
+            <h4 style="margin:0 0 8px; font-family:var(--grg-font-display); font-size:18px">Веб-админка · 5–7 дней</h4>
+            <ul style="margin:0; padding-left:18px; color:var(--grg-ink-200); font-size:13px; line-height:1.7">
+              <li>Vertical sidebar с группами «Структура / Люди / Инфра»</li>
+              <li>Manrope для UI, mono только для кода/ID</li>
+              <li>KPI-панели + глобальный поиск <code>⌘K</code></li>
+              <li>Модалки для форм создания/редактирования</li>
+              <li><code>&lt;label for=""&gt;</code> на все поля формы</li>
+            </ul>
+          </div>
+        </div>
+
+        <div style="margin-top:24px; font-size:12px; color:var(--grg-ink-300); display:flex; gap:12px; align-items:center">
+          <span>Исходный полный список: <code>design-critique.md</code> · 10 приоритетов</span>
+          <span style="color:var(--grg-purple-300)">·</span>
+          <span>Tokens: <code>styles/tokens.css</code> · нужен портер в <code>app_theme.dart</code></span>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js" defer></script><script>
+    // Simple scroll-spy for sidebar
+    const links = document.querySelectorAll('.nav a');
+    const sections = [...links].map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+    const byId = {};
+    sections.forEach(s => byId[s.id] = s);
+    const onScroll = () => {
+      const y = window.scrollY + 120;
+      let current = sections[0]?.id;
+      for (const s of sections) {
+        if (s.offsetTop <= y) current = s.id;
+      }
+      links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + current));
+    };
+    document.addEventListener('scroll', onScroll, {passive:true});
+    onScroll();
+  </script>
+</body>
+</html>

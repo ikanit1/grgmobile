@@ -1,4 +1,5 @@
 // lib/widgets/rtsp_player_widget.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -42,6 +43,15 @@ class RtspPlayerWidgetState extends State<RtspPlayerWidget> {
 
   Future<void> _openStream() async {
     try {
+      // Configure mpv for live streams (RTSP/HLS) — no seeking, low latency
+      if (!kIsWeb && _player.platform is NativePlayer) {
+        final native = _player.platform as NativePlayer;
+        await native.setProperty('force-seekable', 'yes');
+        await native.setProperty('rtsp-transport', 'tcp');
+        await native.setProperty('network-timeout', '10');
+        await native.setProperty('cache', 'no');
+        await native.setProperty('demuxer-lavf-analyzeduration', '0.5');
+      }
       _player.stream.error.listen((error) {
         if (mounted) setState(() => _error = error);
       });

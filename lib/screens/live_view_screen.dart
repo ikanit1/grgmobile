@@ -1,5 +1,6 @@
 // lib/screens/live_view_screen.dart
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../api/backend_client.dart';
 import '../services/stream_quality_service.dart';
@@ -57,10 +58,10 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
       );
       if (!mounted) return;
 
-      // Pick HLS on cellular (WAN), direct RTSP on WiFi (LAN)
-      final url = (pref.preferHls && liveUrl.hlsUrl != null)
-          ? liveUrl.hlsUrl!
-          : liveUrl.rtspUrl;
+      // Prefer HLS when available — works everywhere (web, mobile, LTE, WiFi).
+      // Falls back to RTSP only if no HLS URL provided.
+      final useHls = liveUrl.hlsUrl != null && liveUrl.hlsUrl!.isNotEmpty;
+      final url = useHls ? liveUrl.hlsUrl! : liveUrl.rtspUrl;
 
       if (url.trim().isEmpty) {
         setState(() => _error = 'Не получен адрес видеопотока');

@@ -93,15 +93,26 @@ export class UniviewLiteapiHttpClient {
     const channel = query.channel ?? device.defaultChannel ?? 1;
     const stream = query.stream ?? device.defaultStream ?? 'main';
 
-    const path =
-      device.type === DeviceType.UNIVIEW_NVR
-        ? `/Channels/${channel}/Media/LiveViewURL?StreamType=${stream}`
-        : `/Channels/${channel}/Media/LiveViewURL?StreamType=${stream}`;
-    const data = await this.request(device, 'GET', path);
+    // If custom RTSP URL is set — use it directly, skip LiteAPI entirely
+    if (device.customRtspUrl) {
+      this.logger.log(`getLiveUrl using customRtspUrl for device ${device.id}`);
+      return { protocol: 'rtsp', url: device.customRtspUrl };
+    }
 
-    const url =
-      data?.Data?.Url || data?.Data?.URL || data?.Data?.RtspUrl || data?.Data?.LiveViewURL || '';
+    try {
+      const path = `/Channels/${channel}/Media/LiveViewURL?StreamType=${stream}`;
+      const data = await this.request(device, 'GET', path);
+      const url =
+        data?.Data?.Url || data?.Data?.URL || data?.Data?.RtspUrl || data?.Data?.LiveViewURL || '';
+      if (url) return { protocol: 'rtsp', url };
+    } catch (e: any) {
+      this.logger.warn(`getLiveUrl LiteAPI failed (${e?.message}), falling back to constructed RTSP URL`);
+    }
 
+    // Fallback: construct standard Uniview RTSP URL without calling LiteAPI
+    const { username, password } = this.getAuth(device);
+    const streamIndex = stream === 'sub' ? 1 : 0;
+    const url = `rtsp://${username}:${password}@${device.host}:${device.rtspPort}/unicast/c${channel}/s${streamIndex}/live`;
     return { protocol: 'rtsp', url };
   }
 

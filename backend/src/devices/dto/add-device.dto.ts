@@ -1,4 +1,4 @@
-import { IsEnum, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, Max, Min, ValidateIf } from 'class-validator';
 import { DeviceRole, DeviceType } from '../entities/device.entity';
 
 export class AddDeviceDto {
@@ -51,4 +51,13 @@ export class AddDeviceDto {
   @IsOptional()
   @IsString()
   macAddress?: string;
+
+  @IsOptional()
+  @ValidateIf((o) => o.floor !== null)
+  @IsNumber()
+  floor?: number | null;
+
+  @IsOptional()
+  @IsString()
+  customRtspUrl?: string | null;
 }

@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(docker ps:*)",
+      "Bash(npm -v)",
+      "Bash(flutter --version)",
+      "Bash(flutter devices:*)",
+      "Bash(flutter run:*)",
+      "Bash(curl -s http://localhost:3000/api/health)",
+      "Bash(curl -s http://localhost:3000/docs)",
+      "Bash(npm start:*)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill:*)",
+      "Bash(kill:*)",
+      "Bash(pkill -f \"node.*dist/main.js\")",
+      "Bash(findstr :3000)",
+      "Bash(curl -v http://localhost:3000/api/health)",
+      "Bash(curl -v -X OPTIONS http://localhost:3000/api/auth/register -H \"Origin: http://192.168.10.247:8100\")",
+      "Bash(ipconfig)",
+      "Bash(findstr \"IPv4\")",
+      "Bash(curl -v -X POST http://localhost:3000/api/auth/register -H \"Content-Type: application/json\" -H \"Origin: http://localhost:8100\" -d '{\"\"\"\"email\"\"\"\":\"\"\"\"test@test.com\"\"\"\",\"\"\"\"password\"\"\"\":\"\"\"\"123456\"\"\"\"}')",
+      "Bash(grep -r \"TODO\\\\|FIXME\\\\|XXX\\\\|HACK\" /d/grgmobileapp/backend/src --include=*.ts)",
+      "Bash(grep -r \"TODO\\\\|FIXME\\\\|XXX\\\\|HACK\" /d/grgmobileapp/lib --include=*.dart)",
+      "Bash(grep -l \"throw UnimplementedError\\\\|TODO\\\\|FIXME\\\\|not implemented\" /d/grgmobileapp/lib/**/*.dart)",
+      "Bash(xargs wc:*)",
+      "Bash(find /d/grgmobileapp/backend/src -name *.spec.ts -o -name *.e2e-spec.ts)",
+      "Bash(npx tsc:*)",
+      "Bash(ls /d/grgmobileapp/backend/*.json)"
+    ]
+  }
+}

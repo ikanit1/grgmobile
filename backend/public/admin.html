@@ -99,6 +99,7 @@
       <nav class="nav">
         <a href="/docs" target="_blank">Swagger API</a>
         <span id="userInfo" class="meta"></span>
+        <a href="/api/docs/TUTORIAL.md" target="_blank" class="secondary" style="padding:0.35rem 0.75rem;border:1px solid var(--border);border-radius:4px;font-size:12px;">📖 Туториал</a>
         <button type="button" id="logoutBtn" class="secondary" style="display:none;">Выйти</button>
       </nav>
     </header>
@@ -134,6 +135,24 @@
         <h2 id="createSectionTitle">Создать</h2>
         <div id="createFormContainer"></div>
         <div id="createMsg" class="msg" style="display:none;"></div>
+      </div>
+      <div id="nvrChannelsSection" class="card" style="margin-top:1rem; display:none;">
+        <h2 style="margin-top:0;">Быстрое добавление каналов NVR</h2>
+        <p class="meta">Заполните параметры NVR — будут созданы устройства для каждого канала автоматически.</p>
+        <form id="nvrChannelsForm" style="flex-wrap:wrap;">
+          <label>Здание <select id="nvrBuildingId"></select></label>
+          <input id="nvrHost" placeholder="IP NVR" required>
+          <input id="nvrUser" placeholder="Логин" value="admin">
+          <input id="nvrPass" type="password" placeholder="Пароль">
+          <input id="nvrHttpPort" type="number" placeholder="HTTP порт" value="80" style="width:110px;">
+          <input id="nvrRtspPort" type="number" placeholder="RTSP порт" value="554" style="width:110px;">
+          <input id="nvrChannelFrom" type="number" placeholder="Канал от" value="1" style="width:90px;">
+          <input id="nvrChannelTo" type="number" placeholder="Канал до" value="4" style="width:90px;">
+          <input id="nvrNamePrefix" placeholder="Префикс имени" value="Камера">
+          <button type="submit">Создать каналы</button>
+        </form>
+        <p class="meta" style="margin-top:0.5rem;">Пример: префикс "Камера", каналы 1-4 → "Камера 1", "Камера 2", "Камера 3", "Камера 4". Этаж можно задать позже через "Изменить".</p>
+        <div id="nvrChannelsMsg" class="msg" style="display:none;"></div>
       </div>
     </section>
     <section id="residentSection" class="card" style="display:none;">
@@ -310,6 +329,7 @@
       const createSection = document.getElementById('createSection');
       createSection.style.display = 'none';
       document.getElementById('residentSection').style.display = 'none';
+      document.getElementById('nvrChannelsSection').style.display = 'none';
       content.textContent = 'Загрузка…';
       if (!token || !String(token).trim()) { content.textContent = 'Сначала войдите.'; return; }
       try {
@@ -538,9 +558,7 @@
           if (!r.ok) throw new Error(r.statusText);
           const buildings = await r.json();
           let html = '<p>Устройства по зданиям. Добавить устройство: выберите здание и заполните форму ниже.</p>';
-          html += '<div class="card" style="margin-bottom:1rem;"><h3 style="margin-top:0;">Akuvox (в т.ч. X912): настройка от бэкенда</h3><p style="margin:0 0 0.5rem 0;">Выберите панели и нажмите «Синхронизировать конфиг и квартиры». На панель отправятся: <strong>URL вебхуков</strong> (события вызова, открытие двери), <strong>whitelist</strong> и <strong>список квартир</strong> здания. Номера квартир в системе должны совпадать с номерами на панели (вебхук apartmentNumber).</p><p class="meta" style="margin:0 0 0.5rem 0;">R20/R25: квартиры в Контакты (contact API). <strong>X912, S532, S562:</strong> квартиры попадают в «Каталог » Пользователь» (user API). SIP при необходимости настраивается отдельно на панели.</p>';
-          html += '<button type="button" id="syncConfigBtn">Синхронизировать конфиг и квартиры</button> <span id="syncConfigStatus" class="meta" style="margin-left:0.5rem;"></span></div>';
-          html += '<div class="card" style="margin-bottom:1rem;"><p class="meta" style="margin:0;"><strong>Как настроить панель X912 по бэкенду:</strong> 1) На вкладке «Квартиры» создайте квартиры по зданию (вручную, импортом или «Создать диапазон»). 2) Добавьте устройство типа Akuvox с хостом панели и учётными данными. 3) Здесь выберите это устройство и нажмите «Синхронизировать конфиг и квартиры». При изменении списка квартир синхронизацию можно запустить снова (или она запустится автоматически после импорта/диапазона).</p></div>';
+          html += '<div class="card" style="margin-bottom:1rem;"><p class="meta" style="margin:0;"><strong>Uniview NVR:</strong> добавьте NVR как одно устройство (роль NVR), затем используйте «Быстрое добавление каналов NVR» ниже чтобы создать камеры по каналам. Вызывные панели добавляйте с ролью Домофон. Поле <strong>Этаж</strong> у камер ограничивает видимость: пусто = видят все жители; 1 = только жители 1-го этажа.</p></div>';
           for (const b of buildings) {
             token = localStorage.getItem('doorphone_token');
             let rr = await fetch(API + '/buildings/' + b.id + '/devices', { headers: headers() });
@@ -552,42 +570,43 @@
             const devs = rr.ok ? await rr.json() : [];
             html += '<p><strong>' + (b.name || b.id) + '</strong> (id=' + b.id + '): ' + devs.length + ' шт.</p>';
             if (devs.length) {
-              html += '<table><tr><th>Синхр.</th><th>ID</th><th>Имя</th><th>Тип</th><th>Роль</th><th>Хост</th><th>Действия</th></tr>';
+              html += '<table><tr><th>ID</th><th>Имя</th><th>Тип</th><th>Роль</th><th>Хост</th><th>Канал</th><th>Этаж</th><th>Действия</th></tr>';
               devs.forEach(d => {
-                const isAkuvox = (d.type || '') === 'AKUVOX';
-                const cb = isAkuvox ? '<input type="checkbox" class="sync-config-cb" data-device-id="' + d.id + '" title="Выбрать для синхронизации конфига">' : '';
-                html += '<tr><td>' + cb + '</td><td>' + d.id + '</td><td>' + (d.name || '') + '</td><td>' + (d.type || '') + '</td><td>' + (d.role || '') + '</td><td>' + (d.host || '') + '</td><td>' +
-                  '<button type="button" class="dev-edit" data-device-id="' + d.id + '">Изменить</button> ' +
-                  '<button type="button" class="dev-delete" data-device-id="' + d.id + '" data-device-name="' + (d.name || '#' + d.id).replace(/"/g, '&quot;') + '">Удалить</button></td></tr>';
+                const floorBadge = d.floor != null ? '<span style="background:var(--accent-dim);color:#fff;padding:1px 6px;border-radius:3px;font-size:11px;">эт.'+d.floor+'</span>' : '<span style="color:var(--muted);font-size:11px;">все</span>';
+                const chBadge = d.defaultChannel != null ? d.defaultChannel : '<span style="color:var(--muted);">—</span>';
+                html += '<tr>' +
+                  '<td>' + d.id + '</td>' +
+                  '<td>' + (d.name || '') + '</td>' +
+                  '<td>' + (d.type || '') + '</td>' +
+                  '<td>' + (d.role || '') + '</td>' +
+                  '<td>' + (d.host || '') + '</td>' +
+                  '<td>' + chBadge + '</td>' +
+                  '<td>' + floorBadge + '</td>' +
+                  '<td>' +
+                    '<button type="button" class="dev-edit" data-device-id="' + d.id + '">Изменить</button> ' +
+                    '<button type="button" class="dev-open-door secondary" data-device-id="' + d.id + '" data-device-name="' + (d.name || '#' + d.id).replace(/"/g, '&quot;') + '" title="Открыть дверь">🔓</button> ' +
+                    '<button type="button" class="dev-delete" data-device-id="' + d.id + '" data-device-name="' + (d.name || '#' + d.id).replace(/"/g, '&quot;') + '">Удалить</button>' +
+                  '</td></tr>';
               });
               html += '</table>';
             }
           }
           content.innerHTML = html;
-          const syncConfigBtn = document.getElementById('syncConfigBtn');
-          const syncConfigStatus = document.getElementById('syncConfigStatus');
-          if (syncConfigBtn && syncConfigStatus) {
-            syncConfigBtn.addEventListener('click', async function() {
-              const checked = content.querySelectorAll('.sync-config-cb:checked');
-              const ids = Array.from(checked).map(el => parseInt(el.getAttribute('data-device-id'), 10)).filter(n => !isNaN(n));
-              if (ids.length === 0) { syncConfigStatus.textContent = 'Выберите хотя бы одно устройство Akuvox.'; return; }
-              syncConfigStatus.textContent = 'Запуск…';
-              syncConfigBtn.disabled = true;
-              try {
-                const r = await fetch(API + '/devices/sync-config', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ deviceIds: ids }) });
-                if (r.status === 401) { on401Response(); syncConfigBtn.disabled = false; return; }
-                if (!r.ok) { const d = await r.json().catch(() => ({})); syncConfigStatus.textContent = 'Ошибка: ' + (d.message || r.statusText); syncConfigBtn.disabled = false; return; }
-                const result = await r.json();
-                const failed = (result || []).filter(x => !x.success);
-                if (failed.length === 0) syncConfigStatus.textContent = 'Готово. Устройств: ' + (result.length || 0);
-                else syncConfigStatus.textContent = 'Частично: ' + failed.length + ' с ошибкой. ' + failed.map(x => '#' + x.deviceId + ': ' + (x.error || '')).join('; ');
-                fetchData('devices');
-              } catch (e) { syncConfigStatus.textContent = 'Ошибка: ' + e.message; }
-              syncConfigBtn.disabled = false;
-            });
-          }
           content.querySelectorAll('.dev-edit').forEach(btn => {
             btn.addEventListener('click', function() { openEditDeviceForm(Number(this.dataset.deviceId), buildings); });
+          });
+          content.querySelectorAll('.dev-open-door').forEach(btn => {
+            btn.addEventListener('click', async function() {
+              const id = Number(this.dataset.deviceId);
+              const name = this.dataset.deviceName || ('#' + id);
+              if (!confirm('Открыть дверь «' + name + '»?')) return;
+              try {
+                const r = await fetch(API + '/control/' + id + '/open-door', { method: 'POST', headers: headers() });
+                if (r.status === 401) { on401Response(); return; }
+                const d = await r.json().catch(() => ({}));
+                alert(r.ok ? '✅ Дверь открыта' : '❌ Ошибка: ' + (d.message || r.statusText));
+              } catch (e) { alert('❌ Ошибка: ' + e.message); }
+            });
           });
           content.querySelectorAll('.dev-delete').forEach(btn => {
             btn.addEventListener('click', function() {
@@ -600,6 +619,39 @@
             });
           });
           showCreateDeviceForm(buildings);
+          // Show NVR bulk channels section
+          const nvrSec = document.getElementById('nvrChannelsSection');
+          nvrSec.style.display = 'block';
+          const nvrBldSel = document.getElementById('nvrBuildingId');
+          nvrBldSel.innerHTML = buildings.map(b => '<option value="' + b.id + '">' + (b.name || b.id) + '</option>').join('');
+          document.getElementById('nvrChannelsForm').onsubmit = async function(e) {
+            e.preventDefault();
+            const msgEl = document.getElementById('nvrChannelsMsg');
+            const bid = document.getElementById('nvrBuildingId').value;
+            const host = document.getElementById('nvrHost').value.trim();
+            const user = document.getElementById('nvrUser').value.trim();
+            const pass = document.getElementById('nvrPass').value;
+            const hp = parseInt(document.getElementById('nvrHttpPort').value, 10) || 80;
+            const rp = parseInt(document.getElementById('nvrRtspPort').value, 10) || 554;
+            const from = parseInt(document.getElementById('nvrChannelFrom').value, 10) || 1;
+            const to = parseInt(document.getElementById('nvrChannelTo').value, 10) || 4;
+            const prefix = document.getElementById('nvrNamePrefix').value.trim() || 'Камера';
+            if (!host) { showMsg(msgEl, 'Укажите IP NVR', true); return; }
+            if (from > to || to - from > 31) { showMsg(msgEl, 'Каналы: от 1 до 32 за раз', true); return; }
+            msgEl.textContent = 'Создание…'; msgEl.className = 'msg'; msgEl.style.display = 'block';
+            let ok = 0, fail = 0;
+            for (let ch = from; ch <= to; ch++) {
+              try {
+                const body = { name: prefix + ' ' + ch, host, type: 'UNIVIEW_NVR', role: 'CAMERA', httpPort: hp, rtspPort: rp, defaultChannel: ch, defaultStream: 'main' };
+                if (user) body.username = user;
+                if (pass) body.password = pass;
+                const r = await fetch(API + '/buildings/' + bid + '/devices', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                if (r.ok) ok++; else fail++;
+              } catch (_) { fail++; }
+            }
+            showMsg(msgEl, 'Готово: создано ' + ok + (fail ? ', ошибок ' + fail : ''), fail > 0);
+            if (ok > 0) fetchData('devices');
+          };
           return;
         }
         let url = '';
@@ -901,6 +953,8 @@
         '<input id="devRtspPort" type="number" placeholder="RTSP порт (554)" style="width:110px;" value="' + (editDevice && editDevice.rtspPort != null ? editDevice.rtspPort : 554) + '"> ' +
         '<input id="devChannel" type="number" placeholder="Канал" style="width:80px;" value="' + (editDevice && editDevice.defaultChannel != null ? editDevice.defaultChannel : '') + '"> ' +
         '<input id="devStream" placeholder="Поток (main)" style="width:100px;" value="' + (editDevice && editDevice.defaultStream ? String(editDevice.defaultStream).replace(/"/g, '&quot;') : '') + '"> ' +
+        '<input id="devFloor" type="number" placeholder="Этаж (пусто=все)" style="width:130px;" value="' + (editDevice && editDevice.floor != null ? editDevice.floor : '') + '" title="Ограничение видимости: пусто — камеру видят все жители; число — только жители этого этажа"> ' +
+        '<input id="devCustomRtsp" placeholder="Свой RTSP URL (необяз.)" style="width:260px;" value="' + (editDevice && editDevice.customRtspUrl ? String(editDevice.customRtspUrl).replace(/"/g, '&quot;') : '') + '" title="Если заполнено — используется вместо LiteAPI. Пример: rtsp://192.168.1.100:554/live"> ' +
         '<button type="submit">' + (isEdit ? 'Сохранить' : 'Добавить') + '</button> ' +
         (isEdit ? '<button type="button" id="devCancelEdit" class="secondary">Отмена</button> ' : '') +
         '<button type="button" id="devTestBtn" class="secondary">Проверить связь</button> ' +
@@ -997,6 +1051,11 @@
         if (ch) body.defaultChannel = ch;
         const st = document.getElementById('devStream').value.trim();
         if (st) body.defaultStream = st;
+        const flVal = document.getElementById('devFloor').value.trim();
+        if (flVal !== '') body.floor = parseInt(flVal, 10);
+        else body.floor = null;
+        const customRtsp = document.getElementById('devCustomRtsp').value.trim();
+        body.customRtspUrl = customRtsp || null;
         const msgEl = document.getElementById('createMsg');
         try {
           let r;

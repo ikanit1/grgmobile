@@ -10,7 +10,8 @@
     "test": "jest --config jest.json",
     "test:e2e": "jest --config jest-e2e.json --runInBand",
     "db:reset": "node scripts/reset-database.js",
-    "db:super-admin": "node scripts/make-super-admin.js"
+    "db:super-admin": "node scripts/make-super-admin.js",
+    "mock:uniview": "node scripts/uniview-mock.js"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",

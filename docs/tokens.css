@@ -1,0 +1,122 @@
+/* ===========================================================
+   GRG Design Tokens — единый источник правды для Flutter + Web
+   =========================================================== */
+:root {
+  /* Brand */
+  --grg-purple-100: #EADCFF;
+  --grg-purple-300: #C9A6FF;
+  --grg-purple-500: #8A2BE2;  /* основной акцент */
+  --grg-purple-600: #7520C8;
+  --grg-purple-700: #5A189A;
+  --grg-purple-900: #2A0F4C;
+
+  /* Neutrals — тёплая фиолетовая ночь */
+  --grg-ink-950: #0E061A;
+  --grg-ink-900: #14082A;
+  --grg-ink-800: #1A0B2E;
+  --grg-ink-700: #260F3F;
+  --grg-ink-600: #3A1A5C;
+  --grg-ink-400: #6B5090;
+  --grg-ink-300: #9683BC;
+  --grg-ink-200: #DACBF5;
+  --grg-ink-100: #F1E8FF;
+  --grg-white: #FFFFFF;
+
+  /* Surfaces (with alpha — для glass) */
+  --grg-glass-base: rgba(26, 11, 46, 0.40);
+  --grg-glass-strong: rgba(38, 15, 63, 0.50);
+  --grg-glass-border: rgba(138, 43, 226, 0.30);
+
+  /* Semantic */
+  --grg-success: #3DD598;
+  --grg-warning: #F6C344;
+  --grg-danger:  #FF6B6B;
+  --grg-info:    #5FA8FF;
+
+  /* Typography scale */
+  --grg-font-sans: 'Manrope', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --grg-font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --grg-font-display: 'Unbounded', 'Manrope', sans-serif;
+
+  --grg-fs-display: 32px;
+  --grg-fs-h1: 24px;
+  --grg-fs-h2: 18px;
+  --grg-fs-h3: 15px;
+  --grg-fs-body: 14px;
+  --grg-fs-label: 13px;
+  --grg-fs-caption: 12px;
+
+  /* Spacing (4-pt scale) */
+  --grg-sp-1: 4px;
+  --grg-sp-2: 8px;
+  --grg-sp-3: 12px;
+  --grg-sp-4: 16px;
+  --grg-sp-5: 20px;
+  --grg-sp-6: 24px;
+  --grg-sp-8: 32px;
+  --grg-sp-10: 40px;
+
+  /* Radii */
+  --grg-r-sm: 8px;
+  --grg-r-md: 12px;
+  --grg-r-lg: 16px;
+  --grg-r-xl: 20px;
+  --grg-r-2xl: 28px;
+  --grg-r-full: 999px;
+
+  /* Elevations */
+  --grg-shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --grg-shadow-md: 0 8px 24px rgba(10, 0, 30, 0.45);
+  --grg-shadow-glow: 0 0 0 1px rgba(138,43,226,.35), 0 10px 40px -10px rgba(138,43,226,.55);
+
+  /* Motion */
+  --grg-ease: cubic-bezier(.22,.61,.36,1);
+  --grg-dur-fast: 160ms;
+  --grg-dur-base: 240ms;
+  --grg-dur-slow: 400ms;
+
+  /* Backdrop blur strength */
+  --grg-blur-md: 14px;
+  --grg-blur-lg: 22px;
+}
+
+/* Универсальный фон с амбиентом */
+.grg-bg {
+  background:
+    radial-gradient(1200px 700px at 80% -10%, rgba(138,43,226,.30), transparent 60%),
+    radial-gradient(900px 600px at -10% 90%, rgba(95,168,255,.14), transparent 60%),
+    linear-gradient(180deg, #120724 0%, #0A0418 100%);
+  color: var(--grg-ink-100);
+  font-family: var(--grg-font-sans);
+}
+
+/* Стеклянная поверхность — то, чего сейчас НЕ хватает в GlassCard */
+.grg-glass {
+  background: var(--grg-glass-base);
+  border: 1px solid var(--grg-glass-border);
+  border-radius: var(--grg-r-lg);
+  backdrop-filter: blur(var(--grg-blur-md)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--grg-blur-md)) saturate(140%);
+  box-shadow: var(--grg-shadow-md);
+}
+.grg-glass-strong {
+  background: var(--grg-glass-strong);
+  border: 1px solid var(--grg-glass-border);
+  backdrop-filter: blur(var(--grg-blur-lg)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--grg-blur-lg)) saturate(150%);
+}
+
+/* Shimmer — skeleton loading */
+@keyframes grg-shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.grg-skeleton {
+  background: linear-gradient(90deg,
+    rgba(138,43,226,0.08) 0%,
+    rgba(138,43,226,0.22) 50%,
+    rgba(138,43,226,0.08) 100%);
+  background-size: 800px 100%;
+  animation: grg-shimmer 1.4s linear infinite;
+  border-radius: var(--grg-r-md);
+}

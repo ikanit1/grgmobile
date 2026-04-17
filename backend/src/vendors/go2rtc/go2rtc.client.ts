@@ -31,8 +31,10 @@ export class Go2rtcClient {
   async ensureStream(name: string, rtspUrl: string): Promise<void> {
     if (!this.isConfigured || !this.http) return;
     try {
+      // go2rtc v1.9.x API: PUT /api/streams?name={name}&src={url}
+      const params = `name=${encodeURIComponent(name)}&src=${encodeURIComponent(rtspUrl)}`;
       await firstValueFrom(
-        this.http.put(`${this.internalUrl}/api/streams`, { [name]: [rtspUrl] }),
+        this.http.put(`${this.internalUrl}/api/streams?${params}`, null),
       );
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
