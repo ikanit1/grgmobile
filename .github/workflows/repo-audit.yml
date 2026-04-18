@@ -1,0 +1,61 @@
+name: Repository Audit & Telegram Notification
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  audit:
+    name: Code Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install requests
+
+      - name: Collect changed files
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            git diff --name-only \
+              ${{ github.event.pull_request.base.sha }} \
+              ${{ github.sha }} \
+              2>/dev/null > /tmp/changed_files.txt \
+            || git diff --name-only origin/${{ github.base_ref }}...HEAD \
+              > /tmp/changed_files.txt
+          else
+            BEFORE="${{ github.event.before }}"
+            if git rev-parse --verify "$BEFORE" >/dev/null 2>&1 \
+               && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+              git diff --name-only "$BEFORE" HEAD > /tmp/changed_files.txt
+            else
+              git show --name-only --format="" HEAD > /tmp/changed_files.txt
+            fi
+          fi
+          echo "=== Changed files ==="
+          cat /tmp/changed_files.txt
+
+      - name: Run audit and notify Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MESSAGE: ${{ github.event.commits[0].message || github.event.pull_request.title || '' }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          ACTOR: ${{ github.actor }}
+          SERVER_URL: ${{ github.server_url }}
+        run: python .github/scripts/audit.py
