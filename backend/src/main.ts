@@ -86,6 +86,9 @@ async function bootstrap() {
     swaggerOptions: { persistAuthorization: true },
   });
 
+  // Serve static files from public/ (tokens.css, images, etc.)
+  app.use(express.static(path.join(process.cwd(), 'public')));
+
   const port = process.env.PORT || 3000;
   await app.listen(port as number, '0.0.0.0');
   // eslint-disable-next-line no-console
