@@ -315,6 +315,21 @@ class _BackendHomeContentState extends State<_BackendHomeContent> {
     }
   }
 
+  static String _greeting(String? name) {
+    final h = DateTime.now().hour;
+    final salut = h < 12 ? 'Доброе утро' : h < 18 ? 'Добрый день' : 'Добрый вечер';
+    if (name == null || name.trim().isEmpty) return salut;
+    final firstName = name.trim().split(' ').first;
+    return '$salut, $firstName';
+  }
+
+  static String _initials(String? name) {
+    if (name == null || name.trim().isEmpty) return '?';
+    final parts = name.trim().split(' ');
+    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    return parts[0][0].toUpperCase();
+  }
+
   Future<void> _loadEvents() async {
     try {
       final events = await widget.client.getRecentEvents(limit: 5);
@@ -424,6 +439,9 @@ class _BackendHomeContentState extends State<_BackendHomeContent> {
       );
     }
 
+    final greeting = _greeting(widget.authUser.name);
+    final initials = _initials(widget.authUser.name);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: RefreshIndicator(
@@ -435,18 +453,48 @@ class _BackendHomeContentState extends State<_BackendHomeContent> {
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
           children: [
-            Text(
-              'Мои здания',
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 18,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              widget.authUser.name ?? widget.authUser.id,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        greeting,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 22,
+                          color: AppColors.textPrimary,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF8A2BE2), Color(0xFF5FA8FF)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      initials,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 14),
             _RecentEventsBlock(
