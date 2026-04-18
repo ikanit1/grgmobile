@@ -7,42 +7,22 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Unbounded:wght@600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles/tokens.css">
   <style>
-    /* ── GRG Design Tokens ── */
-    :root {
-      --bg:          #0E061A;
-      --sidebar-bg:  #14082A;
-      --card:        rgba(26, 11, 46, 0.80);
-      --card-solid:  #1A0B2E;
-      --border:      rgba(138, 43, 226, 0.22);
-      --border-hard: #260F3F;
-      --text:        #F1E8FF;
-      --muted:       #9683BC;
-      --accent:      #8A2BE2;
-      --accent-light:#C9A6FF;
-      --accent-dim:  #7520C8;
-      --success:     #3DD598;
-      --error:       #FF6B6B;
-      --warning:     #F6C344;
-      --dur-fast:    160ms;
-      --ease:        cubic-bezier(.22,.61,.36,1);
-    }
-
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: 'Manrope', 'Inter', -apple-system, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      font-family: var(--grg-font-sans);
+      color: var(--grg-ink-100);
       min-height: 100vh;
       font-size: 14px;
       line-height: 1.5;
     }
 
     /* ── Typography ── */
-    h1, h2, h3 { font-family: 'Unbounded', 'Manrope', sans-serif; font-weight: 600; }
-    code, .badge, .meta-code, pre { font-family: 'JetBrains Mono', ui-monospace, monospace; }
-    a { color: var(--accent-light); text-decoration: none; }
+    h1, h2, h3 { font-family: var(--grg-font-display); font-weight: 600; }
+    code, .badge, .meta-code, pre { font-family: var(--grg-font-mono); }
+    a { color: var(--grg-purple-300); text-decoration: none; }
     a:hover { text-decoration: underline; }
 
     /* ── Login overlay (pre-auth) ── */
@@ -68,12 +48,12 @@
     }
     .login-brand h1 {
       font-size: 1.25rem;
-      color: var(--accent-light);
+      color: var(--grg-purple-300);
       letter-spacing: 0.02em;
     }
     .login-brand .sub {
       font-size: 12px;
-      color: var(--muted);
+      color: var(--grg-ink-300);
       margin-top: 4px;
     }
 
@@ -87,8 +67,10 @@
     .sidebar {
       width: 224px;
       flex-shrink: 0;
-      background: var(--sidebar-bg);
-      border-right: 1px solid var(--border);
+      background: rgba(10, 4, 24, 0.70);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-right: 1px solid var(--grg-glass-border);
       display: flex;
       flex-direction: column;
       position: sticky;
@@ -97,25 +79,44 @@
       overflow-y: auto;
     }
     .sidebar-brand {
-      padding: 1.25rem 1.25rem 1rem;
-      border-bottom: 1px solid var(--border);
+      padding: 1.25rem 1rem 1rem;
+      border-bottom: 1px solid var(--grg-glass-border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-logo {
+      width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+      background: conic-gradient(from 210deg, #8A2BE2, #5FA8FF, #8A2BE2);
+      box-shadow: 0 0 0 1px rgba(138,43,226,.4), 0 6px 18px -6px rgba(138,43,226,.6);
+      position: relative;
+    }
+    .brand-logo::after {
+      content: ""; position: absolute; inset: 5px;
+      border-radius: 5px; background: var(--grg-ink-950);
+    }
+    .brand-logo::before {
+      content: ""; position: absolute; inset: 9px; border-radius: 2px;
+      background: linear-gradient(180deg, #8A2BE2, #5FA8FF); z-index: 1;
     }
     .sidebar-brand .brand-name {
       display: block;
-      font-family: 'Unbounded', sans-serif;
-      font-size: 0.9rem;
-      color: var(--accent-light);
-      letter-spacing: 0.02em;
+      font-family: var(--grg-font-display);
+      font-size: 0.875rem;
+      color: #fff;
+      letter-spacing: 0.01em;
     }
     .sidebar-brand .brand-sub {
       display: block;
-      font-size: 11px;
-      color: var(--muted);
+      font-size: 10px;
+      color: var(--grg-ink-400);
       margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
     }
     .sidebar-nav {
       flex: 1;
-      padding: 0.75rem 0;
+      padding: 0.5rem 0.625rem;
       display: flex;
       flex-direction: column;
       gap: 2px;
@@ -123,53 +124,61 @@
     .sidebar-nav-item {
       display: flex;
       align-items: center;
-      gap: 0.625rem;
+      gap: 8px;
       width: 100%;
-      padding: 0.55rem 1.25rem;
+      padding: 8px 10px;
       background: none;
       border: none;
-      border-left: 3px solid transparent;
-      color: var(--muted);
-      font-family: 'Manrope', sans-serif;
+      border-radius: 9px;
+      color: var(--grg-ink-200);
+      font-family: var(--grg-font-sans);
       font-size: 13px;
       font-weight: 500;
       text-align: left;
       cursor: pointer;
-      transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+      transition: background var(--grg-dur-fast) var(--grg-ease), color var(--grg-dur-fast) var(--grg-ease);
     }
     .sidebar-nav-item:hover {
-      background: rgba(138, 43, 226, 0.08);
-      color: var(--text);
+      background: rgba(138, 43, 226, 0.10);
+      color: #fff;
     }
     .sidebar-nav-item.active {
-      background: rgba(138, 43, 226, 0.15);
-      color: var(--accent-light);
-      border-left-color: var(--accent);
+      background: rgba(138, 43, 226, 0.20);
+      color: #fff;
+    }
+    .nav-dot {
+      width: 6px; height: 6px; border-radius: 99px;
+      background: var(--grg-ink-700); flex-shrink: 0;
+      transition: background var(--grg-dur-fast), box-shadow var(--grg-dur-fast);
+    }
+    .sidebar-nav-item.active .nav-dot {
+      background: var(--grg-purple-500);
+      box-shadow: 0 0 6px var(--grg-purple-500);
     }
     .nav-icon {
-      font-size: 14px;
-      width: 18px;
+      font-size: 13px;
+      width: 16px;
       text-align: center;
       flex-shrink: 0;
     }
     .sidebar-footer {
-      padding: 1rem 1.25rem;
-      border-top: 1px solid var(--border);
+      padding: 1rem 1rem;
+      border-top: 1px solid var(--grg-glass-border);
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
     }
     .sidebar-footer .user-role {
       font-size: 11px;
-      color: var(--muted);
+      color: var(--grg-ink-300);
       text-transform: uppercase;
       letter-spacing: 0.08em;
     }
     .sidebar-footer .sidebar-link {
       font-size: 12px;
-      color: var(--muted);
+      color: var(--grg-ink-300);
     }
-    .sidebar-footer .sidebar-link:hover { color: var(--text); }
+    .sidebar-footer .sidebar-link:hover { color: var(--grg-ink-100); }
 
     /* ── Main area ── */
     .main-area {
@@ -184,16 +193,16 @@
       align-items: center;
       justify-content: space-between;
       padding: 0.875rem 1.5rem;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--grg-glass-border);
       gap: 1rem;
       flex-shrink: 0;
     }
     .main-header .page-title {
-      font-family: 'Unbounded', sans-serif;
-      font-size: 0.85rem;
-      color: var(--muted);
+      font-family: var(--grg-font-mono);
+      font-size: 0.75rem;
+      color: var(--grg-ink-300);
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.08em;
     }
     .header-actions { display: flex; align-items: center; gap: 0.75rem; }
     .content-area {
@@ -204,19 +213,28 @@
 
     /* ── Cards ── */
     .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
+      background: var(--grg-glass-base);
+      border: 1px solid var(--grg-glass-border);
+      border-radius: var(--grg-r-lg);
       padding: 1.25rem;
       margin-bottom: 1rem;
-      backdrop-filter: blur(8px);
+      backdrop-filter: blur(var(--grg-blur-md)) saturate(140%);
+      -webkit-backdrop-filter: blur(var(--grg-blur-md)) saturate(140%);
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: ""; position: absolute;
+      top: 0; left: 16px; right: 16px; height: 1px;
+      background: rgba(255, 255, 255, 0.07);
     }
     .card h2 {
-      font-size: 0.8rem;
+      font-family: var(--grg-font-mono);
+      font-size: 0.75rem;
       margin: 0 0 1rem 0;
-      color: var(--text);
+      color: var(--grg-ink-300);
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.08em;
     }
 
     /* ── Forms ── */
@@ -224,96 +242,107 @@
     .field { display: flex; flex-direction: column; gap: 4px; }
     .field label {
       font-size: 12px;
-      color: var(--muted);
+      color: var(--grg-ink-300);
       font-weight: 500;
     }
-    label { font-size: 13px; color: var(--muted); }
+    label { font-size: 13px; color: var(--grg-ink-300); }
     input, select, textarea {
-      background: var(--bg);
-      border: 1px solid var(--border-hard);
-      color: var(--text);
+      background: rgba(14, 6, 26, 0.80);
+      border: 1px solid var(--grg-glass-border);
+      color: var(--grg-ink-100);
       padding: 0.5rem 0.75rem;
-      border-radius: 8px;
-      font-family: 'Manrope', sans-serif;
+      border-radius: var(--grg-r-sm);
+      font-family: var(--grg-font-sans);
       font-size: 13px;
-      transition: border-color var(--dur-fast);
+      transition: border-color var(--grg-dur-fast), box-shadow var(--grg-dur-fast);
     }
     input:focus, select:focus, textarea:focus {
       outline: none;
-      border-color: var(--accent);
+      border-color: var(--grg-purple-500);
+      box-shadow: 0 0 0 2px rgba(138, 43, 226, 0.18);
     }
-    input::placeholder { color: var(--muted); }
-    select option { background: var(--card-solid); }
+    input::placeholder { color: var(--grg-ink-400); }
+    select option { background: var(--grg-ink-800); }
 
     /* ── Buttons ── */
     button {
-      background: var(--accent-dim);
+      background: linear-gradient(135deg, var(--grg-purple-500), var(--grg-purple-600));
       color: white;
       border: none;
       padding: 0.5rem 1rem;
-      border-radius: 8px;
-      font-family: 'Manrope', sans-serif;
+      border-radius: var(--grg-r-sm);
+      font-family: var(--grg-font-sans);
       font-weight: 600;
       cursor: pointer;
       font-size: 13px;
-      transition: background var(--dur-fast) var(--ease);
+      box-shadow: 0 4px 14px -4px rgba(138, 43, 226, 0.60);
+      transition: box-shadow var(--grg-dur-fast) var(--grg-ease),
+                  background var(--grg-dur-fast) var(--grg-ease);
       white-space: nowrap;
     }
-    button:hover { background: var(--accent); }
+    button:hover {
+      background: linear-gradient(135deg, var(--grg-purple-600), var(--grg-purple-700));
+      box-shadow: 0 6px 20px -4px rgba(138, 43, 226, 0.75);
+    }
     button.secondary {
       background: transparent;
-      border: 1px solid var(--border-hard);
-      color: var(--muted);
+      border: 1px solid var(--grg-glass-border);
+      color: var(--grg-ink-300);
+      box-shadow: none;
     }
-    button.secondary:hover { color: var(--text); border-color: var(--accent); }
+    button.secondary:hover { color: #fff; border-color: var(--grg-purple-500); }
     button.danger {
       background: rgba(255, 107, 107, 0.15);
       border: 1px solid rgba(255, 107, 107, 0.3);
-      color: var(--error);
+      color: var(--grg-danger);
+      box-shadow: none;
     }
     button.danger:hover { background: rgba(255, 107, 107, 0.25); }
     .logout-btn {
       background: transparent;
-      border: 1px solid var(--border-hard);
-      color: var(--muted);
+      border: 1px solid var(--grg-glass-border);
+      color: var(--grg-ink-300);
+      box-shadow: none;
       padding: 0.4rem 0.875rem;
       font-size: 12px;
       width: 100%;
     }
-    .logout-btn:hover { color: var(--error); border-color: var(--error); background: rgba(255,107,107,0.08); }
+    .logout-btn:hover { color: var(--grg-danger); border-color: var(--grg-danger); background: rgba(255,107,107,0.08); }
 
     /* ── Messages ── */
-    .msg { margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 13px; }
-    .msg.err { background: rgba(255, 107, 107, 0.12); color: var(--error); border: 1px solid rgba(255,107,107,0.2); }
-    .msg.ok  { background: rgba(61, 213, 152, 0.12); color: var(--success); border: 1px solid rgba(61,213,152,0.2); }
+    .msg { margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: var(--grg-r-sm); font-size: 13px; }
+    .msg.err { background: rgba(255, 107, 107, 0.12); color: var(--grg-danger); border: 1px solid rgba(255,107,107,0.25); }
+    .msg.ok  { background: rgba(61, 213, 152, 0.12); color: var(--grg-success); border: 1px solid rgba(61,213,152,0.25); }
 
     /* ── Tables ── */
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { text-align: left; padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); }
-    th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
-    tr:hover td { background: rgba(138, 43, 226, 0.04); }
+    th, td { text-align: left; padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--grg-glass-border); }
+    th { color: var(--grg-ink-300); font-family: var(--grg-font-mono); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+    tr:hover td { background: rgba(138, 43, 226, 0.06); }
 
     /* ── Badge ── */
     .badge {
       display: inline-block;
       padding: 0.15rem 0.5rem;
-      border-radius: 4px;
-      background: var(--border-hard);
+      border-radius: var(--grg-r-sm);
+      background: rgba(138, 43, 226, 0.15);
+      border: 1px solid var(--grg-glass-border);
+      color: var(--grg-purple-300);
       font-size: 11px;
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--grg-font-mono);
     }
 
     /* ── Meta ── */
-    .meta { color: var(--muted); font-size: 12px; margin-top: 0.5rem; }
+    .meta { color: var(--grg-ink-300); font-size: 12px; margin-top: 0.5rem; }
 
     /* ── Health status ── */
-    #health { font-size: 13px; color: var(--text); }
+    #health { font-size: 13px; color: var(--grg-ink-100); }
 
     /* ── Utilities ── */
-    #userInfo { font-size: 12px; color: var(--muted); }
+    #userInfo { font-size: 12px; color: var(--grg-ink-300); }
   </style>
 </head>
-<body>
+<body class="grg-bg">
 
   <!-- ══ PRE-AUTH: login overlay ══ -->
   <div id="loginContainer" class="login-overlay">
@@ -352,8 +381,11 @@
 
     <aside class="sidebar">
       <div class="sidebar-brand">
-        <span class="brand-name">Doorphone</span>
-        <span class="brand-sub">Панель управления</span>
+        <div class="brand-logo"></div>
+        <div>
+          <span class="brand-name">Doorphone</span>
+          <span class="brand-sub">Admin</span>
+        </div>
       </div>
 
       <!-- Tab nav rendered by buildTabsByRole() -->
@@ -535,7 +567,7 @@
         btn.type = 'button';
         btn.className = 'sidebar-nav-item';
         btn.dataset.tab = tab;
-        btn.innerHTML = '<span class="nav-icon">' + (tabIcons[tab] || '·') + '</span><span>' + label + '</span>';
+        btn.innerHTML = '<span class="nav-dot"></span><span class="nav-icon">' + (tabIcons[tab] || '·') + '</span><span>' + label + '</span>';
         tabBar.appendChild(btn);
       });
       tabBar.querySelectorAll('.sidebar-nav-item').forEach(btn => {
