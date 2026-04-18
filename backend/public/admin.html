@@ -6,174 +6,437 @@
   <title>Doorphone — панель управления</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Unbounded:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Unbounded:wght@600&display=swap" rel="stylesheet">
   <style>
+    /* ── GRG Design Tokens ── */
     :root {
-      --bg: #0f0f12;
-      --card: #18181c;
-      --border: #2a2a30;
-      --text: #e4e4e7;
-      --muted: #71717a;
-      --accent: #a78bfa;
-      --accent-dim: #7c3aed;
-      --success: #22c55e;
-      --error: #ef4444;
+      --bg:          #0E061A;
+      --sidebar-bg:  #14082A;
+      --card:        rgba(26, 11, 46, 0.80);
+      --card-solid:  #1A0B2E;
+      --border:      rgba(138, 43, 226, 0.22);
+      --border-hard: #260F3F;
+      --text:        #F1E8FF;
+      --muted:       #9683BC;
+      --accent:      #8A2BE2;
+      --accent-light:#C9A6FF;
+      --accent-dim:  #7520C8;
+      --success:     #3DD598;
+      --error:       #FF6B6B;
+      --warning:     #F6C344;
+      --dur-fast:    160ms;
+      --ease:        cubic-bezier(.22,.61,.36,1);
     }
-    * { box-sizing: border-box; }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      margin: 0;
-      font-family: 'JetBrains Mono', monospace;
+      font-family: 'Manrope', 'Inter', -apple-system, sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
       font-size: 14px;
+      line-height: 1.5;
     }
-    h1, h2 { font-family: 'Unbounded', sans-serif; font-weight: 600; }
-    .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
-    header {
+
+    /* ── Typography ── */
+    h1, h2, h3 { font-family: 'Unbounded', 'Manrope', sans-serif; font-weight: 600; }
+    code, .badge, .meta-code, pre { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    a { color: var(--accent-light); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Login overlay (pre-auth) ── */
+    .login-overlay {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      padding: 2rem 1rem;
+    }
+    .login-overlay .login-box {
+      width: 100%;
+      max-width: 440px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .login-brand {
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    .login-brand h1 {
+      font-size: 1.25rem;
+      color: var(--accent-light);
+      letter-spacing: 0.02em;
+    }
+    .login-brand .sub {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ── App shell (post-auth) ── */
+    .app-shell {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 224px;
+      flex-shrink: 0;
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .sidebar-brand {
+      padding: 1.25rem 1.25rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-brand .brand-name {
+      display: block;
+      font-family: 'Unbounded', sans-serif;
+      font-size: 0.9rem;
+      color: var(--accent-light);
+      letter-spacing: 0.02em;
+    }
+    .sidebar-brand .brand-sub {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .sidebar-nav {
+      flex: 1;
+      padding: 0.75rem 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .sidebar-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      width: 100%;
+      padding: 0.55rem 1.25rem;
+      background: none;
+      border: none;
+      border-left: 3px solid transparent;
+      color: var(--muted);
+      font-family: 'Manrope', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      text-align: left;
+      cursor: pointer;
+      transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+    }
+    .sidebar-nav-item:hover {
+      background: rgba(138, 43, 226, 0.08);
+      color: var(--text);
+    }
+    .sidebar-nav-item.active {
+      background: rgba(138, 43, 226, 0.15);
+      color: var(--accent-light);
+      border-left-color: var(--accent);
+    }
+    .nav-icon {
+      font-size: 14px;
+      width: 18px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .sidebar-footer {
+      padding: 1rem 1.25rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .sidebar-footer .user-role {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .sidebar-footer .sidebar-link {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .sidebar-footer .sidebar-link:hover { color: var(--text); }
+
+    /* ── Main area ── */
+    .main-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .main-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 1rem 0;
+      padding: 0.875rem 1.5rem;
       border-bottom: 1px solid var(--border);
-      margin-bottom: 1.5rem;
+      gap: 1rem;
+      flex-shrink: 0;
     }
-    header h1 { font-size: 1.25rem; margin: 0; color: var(--accent); }
-    .nav { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
-    a {
-      color: var(--accent);
-      text-decoration: none;
+    .main-header .page-title {
+      font-family: 'Unbounded', sans-serif;
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
     }
-    a:hover { text-decoration: underline; }
+    .header-actions { display: flex; align-items: center; gap: 0.75rem; }
+    .content-area {
+      padding: 1.5rem;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    /* ── Cards ── */
     .card {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 12px;
       padding: 1.25rem;
       margin-bottom: 1rem;
+      backdrop-filter: blur(8px);
     }
-    .card h2 { font-size: 1rem; margin: 0 0 1rem 0; color: var(--muted); }
+    .card h2 {
+      font-size: 0.8rem;
+      margin: 0 0 1rem 0;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    /* ── Forms ── */
     form { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: flex-end; }
-    input {
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    label { font-size: 13px; color: var(--muted); }
+    input, select, textarea {
       background: var(--bg);
-      border: 1px solid var(--border);
+      border: 1px solid var(--border-hard);
       color: var(--text);
       padding: 0.5rem 0.75rem;
-      border-radius: 6px;
-      font-family: inherit;
+      border-radius: 8px;
+      font-family: 'Manrope', sans-serif;
       font-size: 13px;
+      transition: border-color var(--dur-fast);
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
     }
     input::placeholder { color: var(--muted); }
+    select option { background: var(--card-solid); }
+
+    /* ── Buttons ── */
     button {
       background: var(--accent-dim);
       color: white;
       border: none;
       padding: 0.5rem 1rem;
-      border-radius: 6px;
-      font-family: inherit;
+      border-radius: 8px;
+      font-family: 'Manrope', sans-serif;
+      font-weight: 600;
       cursor: pointer;
       font-size: 13px;
+      transition: background var(--dur-fast) var(--ease);
+      white-space: nowrap;
     }
     button:hover { background: var(--accent); }
-    button.secondary { background: var(--border); color: var(--text); }
-    .msg { margin-top: 0.75rem; padding: 0.5rem; border-radius: 6px; font-size: 12px; }
-    .msg.err { background: rgba(239,68,68,0.15); color: var(--error); }
-    .msg.ok { background: rgba(34,197,94,0.15); color: var(--success); }
-    .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
-    .tabs button { background: var(--border); }
-    .tabs button.active { background: var(--accent-dim); }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
-    th { color: var(--muted); font-weight: 500; }
-    .badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; background: var(--border); font-size: 11px; }
-    #authSection { margin-bottom: 1.5rem; }
-    #dataSection { display: none; }
-    #dataSection.ready { display: block; }
+    button.secondary {
+      background: transparent;
+      border: 1px solid var(--border-hard);
+      color: var(--muted);
+    }
+    button.secondary:hover { color: var(--text); border-color: var(--accent); }
+    button.danger {
+      background: rgba(255, 107, 107, 0.15);
+      border: 1px solid rgba(255, 107, 107, 0.3);
+      color: var(--error);
+    }
+    button.danger:hover { background: rgba(255, 107, 107, 0.25); }
+    .logout-btn {
+      background: transparent;
+      border: 1px solid var(--border-hard);
+      color: var(--muted);
+      padding: 0.4rem 0.875rem;
+      font-size: 12px;
+      width: 100%;
+    }
+    .logout-btn:hover { color: var(--error); border-color: var(--error); background: rgba(255,107,107,0.08); }
+
+    /* ── Messages ── */
+    .msg { margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 13px; }
+    .msg.err { background: rgba(255, 107, 107, 0.12); color: var(--error); border: 1px solid rgba(255,107,107,0.2); }
+    .msg.ok  { background: rgba(61, 213, 152, 0.12); color: var(--success); border: 1px solid rgba(61,213,152,0.2); }
+
+    /* ── Tables ── */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+    tr:hover td { background: rgba(138, 43, 226, 0.04); }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      background: var(--border-hard);
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Meta ── */
     .meta { color: var(--muted); font-size: 12px; margin-top: 0.5rem; }
+
+    /* ── Health status ── */
+    #health { font-size: 13px; color: var(--text); }
+
+    /* ── Utilities ── */
+    #userInfo { font-size: 12px; color: var(--muted); }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>Doorphone Backend</h1>
-      <nav class="nav">
-        <a href="/docs" target="_blank">Swagger API</a>
-        <span id="userInfo" class="meta"></span>
-        <a href="/api/docs/TUTORIAL.md" target="_blank" class="secondary" style="padding:0.35rem 0.75rem;border:1px solid var(--border);border-radius:4px;font-size:12px;">📖 Туториал</a>
-        <button type="button" id="logoutBtn" class="secondary" style="display:none;">Выйти</button>
-      </nav>
-    </header>
 
-    <section id="authSection" class="card">
-      <h2>Вход</h2>
-      <form id="loginForm">
-        <div>
-          <label style="display:block; margin-bottom:0.25rem; color: var(--muted);">Логин (email или телефон)</label>
-          <input type="text" id="login" name="login" placeholder="admin@example.com" required>
-        </div>
-        <div>
-          <label style="display:block; margin-bottom:0.25rem; color: var(--muted);">Пароль</label>
-          <input type="password" id="password" name="password" placeholder="••••••" required>
-        </div>
-        <button type="submit">Войти</button>
-      </form>
-      <div id="loginMsg" class="msg" style="display:none;"></div>
-    </section>
-
-    <section class="card">
-      <h2>Настройки backend</h2>
-      <div id="health">Загрузка…</div>
-      <div class="meta">GET /api/health</div>
-    </section>
-
-    <section id="dataSection" class="card">
-      <h2>Данные</h2>
-      <p id="roleHint" class="meta" style="margin-bottom:0.75rem;"></p>
-      <div class="tabs" id="tabBar"></div>
-      <div id="dataContent">Выберите вкладку</div>
-      <div id="createSection" class="card" style="margin-top:1rem; display:none;">
-        <h2 id="createSectionTitle">Создать</h2>
-        <div id="createFormContainer"></div>
-        <div id="createMsg" class="msg" style="display:none;"></div>
+  <!-- ══ PRE-AUTH: login overlay ══ -->
+  <div id="loginContainer" class="login-overlay">
+    <div class="login-box">
+      <div class="login-brand">
+        <h1>Doorphone</h1>
+        <p class="sub">Панель управления</p>
       </div>
-      <div id="nvrChannelsSection" class="card" style="margin-top:1rem; display:none;">
-        <h2 style="margin-top:0;">Быстрое добавление каналов NVR</h2>
-        <p class="meta">Заполните параметры NVR — будут созданы устройства для каждого канала автоматически.</p>
-        <form id="nvrChannelsForm" style="flex-wrap:wrap;">
-          <label>Здание <select id="nvrBuildingId"></select></label>
-          <input id="nvrHost" placeholder="IP NVR" required>
-          <input id="nvrUser" placeholder="Логин" value="admin">
-          <input id="nvrPass" type="password" placeholder="Пароль">
-          <input id="nvrHttpPort" type="number" placeholder="HTTP порт" value="80" style="width:110px;">
-          <input id="nvrRtspPort" type="number" placeholder="RTSP порт" value="554" style="width:110px;">
-          <input id="nvrChannelFrom" type="number" placeholder="Канал от" value="1" style="width:90px;">
-          <input id="nvrChannelTo" type="number" placeholder="Канал до" value="4" style="width:90px;">
-          <input id="nvrNamePrefix" placeholder="Префикс имени" value="Камера">
-          <button type="submit">Создать каналы</button>
+
+      <div class="card">
+        <h2>Состояние сервера</h2>
+        <div id="health">Загрузка…</div>
+        <div class="meta">GET /api/health</div>
+      </div>
+
+      <div class="card" id="authSection">
+        <h2>Вход</h2>
+        <form id="loginForm" style="flex-direction:column; align-items:stretch;">
+          <div class="field">
+            <label for="login">Логин (email или телефон)</label>
+            <input type="text" id="login" name="login" placeholder="admin@example.com" required autocomplete="username">
+          </div>
+          <div class="field">
+            <label for="password">Пароль</label>
+            <input type="password" id="password" name="password" placeholder="••••••" required autocomplete="current-password">
+          </div>
+          <button type="submit" style="margin-top:0.25rem;">Войти</button>
         </form>
-        <p class="meta" style="margin-top:0.5rem;">Пример: префикс "Камера", каналы 1-4 → "Камера 1", "Камера 2", "Камера 3", "Камера 4". Этаж можно задать позже через "Изменить".</p>
-        <div id="nvrChannelsMsg" class="msg" style="display:none;"></div>
+        <div id="loginMsg" class="msg" style="display:none;"></div>
       </div>
-    </section>
-    <section id="residentSection" class="card" style="display:none;">
-      <h2>Жители квартиры</h2>
-      <p class="meta">Квартира: <span id="residentApartmentName">—</span></p>
-      <div id="residentsList">Загрузка…</div>
-      <form id="addResidentForm" style="margin-top:1rem;">
-        <input type="text" id="resUserId" placeholder="ID пользователя (или оставьте пустым)" style="width:200px;">
-        <input type="text" id="resEmail" placeholder="Email">
-        <input type="text" id="resPhone" placeholder="Телефон">
-        <input type="text" id="resRole" placeholder="роль: owner/resident/guest" value="resident" style="width:120px;">
-        <button type="submit">Добавить жителя</button>
-      </form>
-      <div id="addResidentMsg" class="msg" style="display:none;"></div>
-    </section>
+    </div>
+  </div>
+
+  <!-- ══ POST-AUTH: sidebar shell ══ -->
+  <div id="appShell" class="app-shell" style="display:none;">
+
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="brand-name">Doorphone</span>
+        <span class="brand-sub">Панель управления</span>
+      </div>
+
+      <!-- Tab nav rendered by buildTabsByRole() -->
+      <nav id="tabBar" class="sidebar-nav"></nav>
+
+      <div class="sidebar-footer">
+        <span class="user-role" id="userInfo"></span>
+        <a href="/docs" target="_blank" class="sidebar-link">Swagger API</a>
+        <a href="/api/docs/TUTORIAL.md" target="_blank" class="sidebar-link">📖 Туториал</a>
+        <button type="button" id="logoutBtn" class="logout-btn">Выйти</button>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="main-header">
+        <span class="page-title" id="pageTitle">Панель управления</span>
+        <div class="header-actions">
+          <span id="roleHint" class="meta"></span>
+        </div>
+      </header>
+
+      <div class="content-area" id="dataSection">
+        <div id="dataContent">Выберите раздел</div>
+
+        <div id="createSection" class="card" style="margin-top:1rem; display:none;">
+          <h2 id="createSectionTitle">Создать</h2>
+          <div id="createFormContainer"></div>
+          <div id="createMsg" class="msg" style="display:none;"></div>
+        </div>
+
+        <div id="nvrChannelsSection" class="card" style="margin-top:1rem; display:none;">
+          <h2 style="margin-top:0;">Быстрое добавление каналов NVR</h2>
+          <p class="meta">Заполните параметры NVR — будут созданы устройства для каждого канала автоматически.</p>
+          <form id="nvrChannelsForm" style="flex-wrap:wrap; margin-top:0.75rem;">
+            <label>Здание <select id="nvrBuildingId"></select></label>
+            <input id="nvrHost" placeholder="IP NVR" required>
+            <input id="nvrUser" placeholder="Логин" value="admin">
+            <input id="nvrPass" type="password" placeholder="Пароль">
+            <input id="nvrHttpPort" type="number" placeholder="HTTP порт" value="80" style="width:110px;">
+            <input id="nvrRtspPort" type="number" placeholder="RTSP порт" value="554" style="width:110px;">
+            <input id="nvrChannelFrom" type="number" placeholder="Канал от" value="1" style="width:90px;">
+            <input id="nvrChannelTo" type="number" placeholder="Канал до" value="4" style="width:90px;">
+            <input id="nvrNamePrefix" placeholder="Префикс имени" value="Камера">
+            <button type="submit">Создать каналы</button>
+          </form>
+          <p class="meta" style="margin-top:0.5rem;">Пример: префикс «Камера», каналы 1-4 → «Камера 1», «Камера 2», «Камера 3», «Камера 4».</p>
+          <div id="nvrChannelsMsg" class="msg" style="display:none;"></div>
+        </div>
+
+        <section id="residentSection" class="card" style="margin-top:1rem; display:none;">
+          <h2>Жители квартиры</h2>
+          <p class="meta">Квартира: <span id="residentApartmentName">—</span></p>
+          <div id="residentsList" style="margin-top:0.75rem;">Загрузка…</div>
+          <form id="addResidentForm" style="margin-top:1rem;">
+            <label for="resUserId">ID пользователя (или оставьте пустым)</label>
+            <input type="text" id="resUserId" placeholder="UUID или пусто" style="width:200px;">
+            <input type="text" id="resEmail" placeholder="Email">
+            <input type="text" id="resPhone" placeholder="Телефон">
+            <input type="text" id="resRole" placeholder="роль: owner/resident/guest" value="resident" style="width:140px;">
+            <button type="submit">Добавить жителя</button>
+          </form>
+          <div id="addResidentMsg" class="msg" style="display:none;"></div>
+        </section>
+      </div>
+    </div>
   </div>
 
   <script>
     const API = '/api';
     let token = localStorage.getItem('doorphone_token');
-    let currentUser = null; // { id, role, organizationId, complexId }
+    let currentUser = null;
+
+    const tabIcons = {
+      dashboard:     '◈',
+      organizations: '⬡',
+      complexes:     '⊕',
+      buildings:     '▣',
+      apartments:    '⊟',
+      residents:     '⊜',
+      users:         '○',
+      devices:       '⊛',
+      applications:  '⊠',
+    };
 
     function parseJwt(t) {
       try {
@@ -196,10 +459,14 @@
     }
 
     async function fetchHealth() {
-      const r = await fetch(API + '/health');
-      const d = await r.json();
-      document.getElementById('health').innerHTML =
-        '<strong>Статус:</strong> ' + d.status + ' &nbsp;|&nbsp; <strong>БД:</strong> ' + d.dbType + ' &nbsp;|&nbsp; <strong>Порт:</strong> ' + d.port;
+      try {
+        const r = await fetch(API + '/health');
+        const d = await r.json();
+        document.getElementById('health').innerHTML =
+          '<strong>Статус:</strong> ' + d.status + ' &nbsp;|&nbsp; <strong>БД:</strong> ' + d.dbType + ' &nbsp;|&nbsp; <strong>Порт:</strong> ' + d.port;
+      } catch (e) {
+        document.getElementById('health').innerHTML = '<span style="color:var(--error)">Нет связи с сервером</span>';
+      }
     }
 
     async function auth() {
@@ -238,42 +505,44 @@
       const tabBar = document.getElementById('tabBar');
       tabBar.innerHTML = '';
       if (role === 'RESIDENT') {
-        hint.textContent = 'Роль: Житель. Используйте мобильное приложение для доступа к своим домам и устройствам.';
+        hint.textContent = 'Роль: Житель. Используйте мобильное приложение.';
         document.getElementById('dataContent').textContent = 'Для управления домофонами используйте мобильное приложение.';
         return;
       }
       hint.textContent = 'Роль: ' + (role || '—');
       const tabs = [];
       if (role === 'SUPER_ADMIN') {
-        tabs.push({ tab: 'dashboard', label: 'Дашборд' });
+        tabs.push({ tab: 'dashboard',     label: 'Дашборд' });
         tabs.push({ tab: 'organizations', label: 'Организации' });
-        tabs.push({ tab: 'complexes', label: 'ЖК' });
-        tabs.push({ tab: 'buildings', label: 'Здания' });
-        tabs.push({ tab: 'apartments', label: 'Квартиры' });
-        tabs.push({ tab: 'residents', label: 'Жители (привязка)' });
-        tabs.push({ tab: 'users', label: 'Пользователи' });
-        tabs.push({ tab: 'devices', label: 'Устройства' });
-        tabs.push({ tab: 'applications', label: 'Заявки жителей' });
+        tabs.push({ tab: 'complexes',     label: 'ЖК' });
+        tabs.push({ tab: 'buildings',     label: 'Здания' });
+        tabs.push({ tab: 'apartments',    label: 'Квартиры' });
+        tabs.push({ tab: 'residents',     label: 'Жители' });
+        tabs.push({ tab: 'users',         label: 'Пользователи' });
+        tabs.push({ tab: 'devices',       label: 'Устройства' });
+        tabs.push({ tab: 'applications',  label: 'Заявки' });
       } else if (role === 'ORG_ADMIN' || role === 'COMPLEX_MANAGER') {
-        tabs.push({ tab: 'dashboard', label: 'Дашборд' });
-        tabs.push({ tab: 'complexes', label: 'ЖК' });
-        tabs.push({ tab: 'buildings', label: 'Здания' });
-        tabs.push({ tab: 'apartments', label: 'Квартиры' });
-        tabs.push({ tab: 'devices', label: 'Устройства' });
-        tabs.push({ tab: 'residents', label: 'Жители (привязка)' });
-        tabs.push({ tab: 'applications', label: 'Заявки жителей' });
+        tabs.push({ tab: 'dashboard',    label: 'Дашборд' });
+        tabs.push({ tab: 'complexes',    label: 'ЖК' });
+        tabs.push({ tab: 'buildings',    label: 'Здания' });
+        tabs.push({ tab: 'apartments',   label: 'Квартиры' });
+        tabs.push({ tab: 'devices',      label: 'Устройства' });
+        tabs.push({ tab: 'residents',    label: 'Жители' });
+        tabs.push({ tab: 'applications', label: 'Заявки' });
       }
       tabs.forEach(({ tab, label }) => {
         const btn = document.createElement('button');
         btn.type = 'button';
+        btn.className = 'sidebar-nav-item';
         btn.dataset.tab = tab;
-        btn.textContent = label;
+        btn.innerHTML = '<span class="nav-icon">' + (tabIcons[tab] || '·') + '</span><span>' + label + '</span>';
         tabBar.appendChild(btn);
       });
-      tabBar.querySelectorAll('button').forEach(btn => {
+      tabBar.querySelectorAll('.sidebar-nav-item').forEach(btn => {
         btn.addEventListener('click', function() {
-          tabBar.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+          tabBar.querySelectorAll('.sidebar-nav-item').forEach(b => b.classList.remove('active'));
           this.classList.add('active');
+          document.getElementById('pageTitle').textContent = this.querySelector('span:last-child').textContent;
           try { sessionStorage.setItem('admin_tab', this.dataset.tab); } catch (e) {}
           fetchData(this.dataset.tab);
         });
@@ -284,15 +553,19 @@
           const saved = sessionStorage.getItem('admin_tab');
           if (saved && tabs.some(t => t.tab === saved)) activeTab = saved;
         } catch (e) {}
-        const activeBtn = Array.from(tabBar.querySelectorAll('button')).find(b => b.dataset.tab === activeTab) || tabBar.querySelector('button');
-        if (activeBtn) { activeBtn.classList.add('active'); fetchData(activeBtn.dataset.tab); }
+        const activeBtn = Array.from(tabBar.querySelectorAll('.sidebar-nav-item')).find(b => b.dataset.tab === activeTab) || tabBar.querySelector('.sidebar-nav-item');
+        if (activeBtn) {
+          activeBtn.classList.add('active');
+          document.getElementById('pageTitle').textContent = activeBtn.querySelector('span:last-child').textContent;
+          fetchData(activeBtn.dataset.tab);
+        }
       }
     }
 
     function onTokenReady() {
       setUserFromToken();
-      document.getElementById('dataSection').classList.add('ready');
-      document.getElementById('logoutBtn').style.display = 'inline-block';
+      document.getElementById('loginContainer').style.display = 'none';
+      document.getElementById('appShell').style.display = 'flex';
       document.getElementById('userInfo').textContent = currentUser ? ('Роль: ' + currentUser.role) : 'Токен сохранён';
       buildTabsByRole();
     }
@@ -301,13 +574,13 @@
       token = null;
       currentUser = null;
       localStorage.removeItem('doorphone_token');
-      document.getElementById('dataSection').classList.remove('ready');
-      document.getElementById('logoutBtn').style.display = 'none';
-      document.getElementById('userInfo').textContent = '';
-      document.getElementById('dataContent').textContent = 'Выберите вкладку';
+      document.getElementById('appShell').style.display = 'none';
+      document.getElementById('loginContainer').style.display = 'flex';
+      document.getElementById('dataContent').textContent = 'Выберите раздел';
       document.getElementById('tabBar').innerHTML = '';
       document.getElementById('residentSection').style.display = 'none';
       document.getElementById('loginMsg').style.display = 'none';
+      document.getElementById('pageTitle').textContent = 'Панель управления';
     }
 
     function handle401() {
@@ -338,13 +611,14 @@
           if (r.status === 401) { on401Response(); return; }
           if (!r.ok) throw new Error(r.statusText);
           const s = await r.json();
-          let html = '<div class="card"><h2>Сводка</h2><ul style="list-style:none; padding:0;">';
-          if (s.organizations != null) html += '<li><strong>Организации:</strong> ' + s.organizations + '</li>';
-          html += '<li><strong>ЖК:</strong> ' + (s.complexes ?? 0) + '</li>';
-          html += '<li><strong>Здания:</strong> ' + (s.buildings ?? 0) + '</li>';
-          html += '<li><strong>Устройства:</strong> ' + (s.devices ?? 0) + ' (онлайн: ' + (s.devicesOnline ?? 0) + ', офлайн: ' + (s.devicesOffline ?? 0) + ')</li>';
-          html += '<li><strong>Жители:</strong> ' + (s.residents ?? 0) + '</li>';
-          html += '<li><strong>Заявки ожидают одобрения:</strong> ' + (s.applicationsPending ?? 0) + '</li>';
+          let html = '<div class="card"><h2>Сводка</h2><ul style="list-style:none; padding:0; display:flex; flex-wrap:wrap; gap:1rem;">';
+          const stat = (label, val) => '<li style="min-width:160px; padding:0.75rem 1rem; background:var(--bg); border:1px solid var(--border); border-radius:8px;"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;">' + label + '</div><div style="font-size:1.5rem;font-weight:700;color:var(--accent-light);margin-top:4px;">' + val + '</div></li>';
+          if (s.organizations != null) html += stat('Организации', s.organizations);
+          html += stat('ЖК', s.complexes ?? 0);
+          html += stat('Здания', s.buildings ?? 0);
+          html += stat('Устройства', (s.devices ?? 0) + ' <span style="font-size:13px;color:var(--success);">↑' + (s.devicesOnline ?? 0) + '</span> <span style="font-size:13px;color:var(--error);">↓' + (s.devicesOffline ?? 0) + '</span>');
+          html += stat('Жители', s.residents ?? 0);
+          html += stat('Заявки ожидают', s.applicationsPending ?? 0);
           html += '</ul></div>';
           content.innerHTML = html;
           return;
@@ -355,14 +629,12 @@
           if (!r.ok) throw new Error(r.statusText);
           const buildings = await r.json();
           const buildingOpts = Array.isArray(buildings) ? buildings.map(function(b) { return '<option value="' + b.id + '">' + (b.name || b.id) + '</option>'; }).join('') : '';
-          let html = '<div class="card" style="margin-bottom:1rem;"><h2>Создать квартиру</h2><form id="formCreateAptTop"><label>Здание <select id="aptBuildingIdTop">' + buildingOpts + '</select></label> <input id="aptNumberTop" placeholder="Номер квартиры" required> <input id="aptFloorTop" type="number" placeholder="Этаж"> <input id="aptExtensionTop" placeholder="Расширение (SIP/номер для вызова монитора)"> <button type="submit">Создать</button></form><div id="createAptMsgTop" class="msg" style="display:none;"></div><p class="meta" style="margin-top:0.75rem;">Для Akuvox: номера квартир должны совпадать с номерами в вебхуке (apartmentNumber). Если указано расширение, панель будет звонить на этот номер; такой же номер должен быть настроен на внутреннем мониторе.</p></div>';
-          html += '<p>Квартиры по зданиям. Выберите здание или импортируйте квартиры (CSV/Excel):</p><ul>';
+          let html = '<div class="card" style="margin-bottom:1rem;"><h2>Создать квартиру</h2><form id="formCreateAptTop"><label for="aptBuildingIdTop">Здание</label> <select id="aptBuildingIdTop">' + buildingOpts + '</select> <input id="aptNumberTop" placeholder="Номер квартиры" required> <input id="aptFloorTop" type="number" placeholder="Этаж"> <input id="aptExtensionTop" placeholder="Расширение (SIP/номер монитора)"> <button type="submit">Создать</button></form><div id="createAptMsgTop" class="msg" style="display:none;"></div><p class="meta" style="margin-top:0.75rem;">Для Akuvox: номера квартир должны совпадать с номерами в вебхуке. Расширение — SIP-номер монитора.</p></div>';
+          html += '<p>Квартиры по зданиям. Выберите здание или импортируйте квартиры (CSV/Excel):</p><ul style="margin-top:0.5rem;">';
           for (const b of buildings) {
-            html += '<li><a href="#" data-load-apartments="' + b.id + '">' + (b.name || 'Здание ' + b.id) + '</a> ' +
-              '<button type="button" class="import-apartments-btn" data-building-id="' + b.id + '">Импорт квартир</button> ' +
-              '<button type="button" class="bulk-apartments-btn" data-building-id="' + b.id + '" data-building-name="' + (b.name || b.id).toString().replace(/"/g, '&quot;') + '">Создать диапазон</button></li>';
+            html += '<li style="margin-bottom:0.375rem;"><a href="#" data-load-apartments="' + b.id + '">' + (b.name || 'Здание ' + b.id) + '</a> &nbsp;<button type="button" class="import-apartments-btn secondary" data-building-id="' + b.id + '">Импорт квартир</button> <button type="button" class="bulk-apartments-btn secondary" data-building-id="' + b.id + '" data-building-name="' + (b.name || b.id).toString().replace(/"/g, '&quot;') + '">Создать диапазон</button></li>';
           }
-          html += '</ul><div id="apartmentsList"></div>';
+          html += '</ul><div id="apartmentsList" style="margin-top:1rem;"></div>';
           content.innerHTML = html;
           (function() {
             const form = document.getElementById('formCreateAptTop');
@@ -407,7 +679,6 @@
           content.querySelectorAll('.bulk-apartments-btn').forEach(btn => {
             btn.addEventListener('click', async function() {
               const bid = this.dataset.buildingId;
-              const name = this.dataset.buildingName || bid;
               const fromStr = prompt('Номер первой квартиры (от):', '1');
               if (fromStr == null) return;
               const toStr = prompt('Номер последней квартиры (до):', '50');
@@ -454,17 +725,17 @@
           if (r.status === 401) { on401Response(); return; }
           if (!r.ok) throw new Error(r.statusText);
           const list = await r.json();
-          let html = '<p>Заявки жителей на привязку к квартире. Фильтры:</p>';
-          html += '<p><label>Статус <select id="applicationsStatusFilter">' +
+          let html = '<div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;">';
+          html += '<label for="applicationsStatusFilter">Статус</label> <select id="applicationsStatusFilter">' +
             '<option value="PENDING"' + (st === 'PENDING' ? ' selected' : '') + '>Ожидают</option>' +
             '<option value="APPROVED"' + (st === 'APPROVED' ? ' selected' : '') + '>Одобрены</option>' +
             '<option value="REJECTED"' + (st === 'REJECTED' ? ' selected' : '') + '>Отклонены</option>' +
-            '</select></label> <label>Здание <select id="applicationsBuildingFilter">' + buildingOpts + '</select></label> ' +
-            '<button type="button" id="applicationsRefreshBtn">Обновить</button></p>';
+            '</select> <label for="applicationsBuildingFilter">Здание</label> <select id="applicationsBuildingFilter">' + buildingOpts + '</select> ' +
+            '<button type="button" id="applicationsRefreshBtn">Обновить</button></div>';
           if (list.length === 0) {
-            html += '<p>Нет заявок.</p>';
+            html += '<p style="color:var(--muted);">Нет заявок.</p>';
           } else {
-            html += '<table><tr><th>ID</th><th>Квартира</th><th>Здание</th><th>Пользователь</th><th>Статус</th><th>Дата</th><th>Действия</th></tr>';
+            html += '<table><thead><tr><th>ID</th><th>Квартира</th><th>Здание</th><th>Пользователь</th><th>Статус</th><th>Дата</th><th>Действия</th></tr></thead><tbody>';
             list.forEach(app => {
               const apt = app.apartment || {};
               const b = (apt.building || {});
@@ -473,14 +744,14 @@
               const reqDate = app.requestedAt ? new Date(app.requestedAt).toLocaleString() : '—';
               let actions = '';
               if (app.status === 'PENDING') {
-                actions = '<button type="button" class="app-approve" data-id="' + app.id + '">Одобрить</button> ' +
-                  '<button type="button" class="app-reject" data-id="' + app.id + '">Отклонить</button>';
+                actions = '<button type="button" class="app-approve secondary" data-id="' + app.id + '">Одобрить</button> ' +
+                  '<button type="button" class="app-reject danger" data-id="' + app.id + '">Отклонить</button>';
               } else {
                 actions = '—';
               }
-              html += '<tr><td>' + app.id + '</td><td>' + (apt.number || apt.id) + '</td><td>' + (b.name || b.id) + '</td><td>' + userLabel + '</td><td>' + app.status + '</td><td>' + reqDate + '</td><td>' + actions + '</td></tr>';
+              html += '<tr><td><code>' + app.id + '</code></td><td>' + (apt.number || apt.id) + '</td><td>' + (b.name || b.id) + '</td><td>' + userLabel + '</td><td>' + app.status + '</td><td>' + reqDate + '</td><td>' + actions + '</td></tr>';
             });
-            html += '</table>';
+            html += '</tbody></table>';
           }
           content.innerHTML = html;
           content.querySelector('#applicationsRefreshBtn') && content.querySelector('#applicationsRefreshBtn').addEventListener('click', function() { fetchData('applications'); });
@@ -513,13 +784,13 @@
           if (r.status === 401) { on401Response(); return; }
           if (!r.ok) throw new Error(r.statusText);
           const buildings = await r.json();
-          let html = '<p>Выберите здание, затем квартиру — чтобы добавить/удалить жителя. Либо импортируйте жителей по зданию:</p>';
+          let html = '<p style="margin-bottom:1rem;">Выберите здание, затем квартиру — чтобы добавить/удалить жителя. Либо импортируйте жителей по зданию:</p>';
           for (const b of buildings) {
-            html += '<p><strong>' + (b.name || b.id) + '</strong> ';
+            html += '<div style="margin-bottom:0.75rem;"><strong>' + (b.name || b.id) + '</strong>: ';
             const rr = await fetch(API + '/apartments/by-building/' + b.id, { headers: headers() });
             const apts = rr.ok ? await rr.json() : [];
-            apts.forEach(a => { html += '<a href="#" data-apt-id="' + a.id + '" data-apt-name="' + (a.number || a.id) + '">' + (a.number || a.id) + '</a> '; });
-            html += ' <button type="button" class="import-residents-btn" data-building-id="' + b.id + '" data-building-name="' + (b.name || b.id) + '">Импорт жителей</button></p>';
+            apts.forEach(a => { html += '<a href="#" data-apt-id="' + a.id + '" data-apt-name="' + (a.number || a.id) + '" style="margin-right:0.5rem;">' + (a.number || a.id) + '</a>'; });
+            html += ' &nbsp;<button type="button" class="import-residents-btn secondary" data-building-id="' + b.id + '" data-building-name="' + (b.name || b.id) + '">Импорт жителей</button></div>';
           }
           content.innerHTML = html;
           content.querySelectorAll('[data-apt-id]').forEach(a => {
@@ -557,8 +828,7 @@
           if (r.status === 401) { on401Response(); return; }
           if (!r.ok) throw new Error(r.statusText);
           const buildings = await r.json();
-          let html = '<p>Устройства по зданиям. Добавить устройство: выберите здание и заполните форму ниже.</p>';
-          html += '<div class="card" style="margin-bottom:1rem;"><p class="meta" style="margin:0;"><strong>Uniview NVR:</strong> добавьте NVR как одно устройство (роль NVR), затем используйте «Быстрое добавление каналов NVR» ниже чтобы создать камеры по каналам. Вызывные панели добавляйте с ролью Домофон. Поле <strong>Этаж</strong> у камер ограничивает видимость: пусто = видят все жители; 1 = только жители 1-го этажа.</p></div>';
+          let html = '<div class="card" style="margin-bottom:1rem;"><p class="meta" style="margin:0;"><strong>Uniview NVR:</strong> добавьте NVR как одно устройство (роль NVR), затем используйте «Быстрое добавление каналов NVR» ниже. Вызывные панели — роль Домофон. Поле <strong>Этаж</strong>: пусто = видят все жители; число = только жители этого этажа.</p></div>';
           for (const b of buildings) {
             token = localStorage.getItem('doorphone_token');
             let rr = await fetch(API + '/buildings/' + b.id + '/devices', { headers: headers() });
@@ -568,27 +838,27 @@
             }
             if (rr.status === 401) { on401Response(); return; }
             const devs = rr.ok ? await rr.json() : [];
-            html += '<p><strong>' + (b.name || b.id) + '</strong> (id=' + b.id + '): ' + devs.length + ' шт.</p>';
+            html += '<h3 style="font-size:13px;font-weight:600;margin:1rem 0 0.5rem;">' + (b.name || b.id) + ' <span style="color:var(--muted);font-weight:400;">(id=' + b.id + '): ' + devs.length + ' шт.</span></h3>';
             if (devs.length) {
-              html += '<table><tr><th>ID</th><th>Имя</th><th>Тип</th><th>Роль</th><th>Хост</th><th>Канал</th><th>Этаж</th><th>Действия</th></tr>';
+              html += '<table><thead><tr><th>ID</th><th>Имя</th><th>Тип</th><th>Роль</th><th>Хост</th><th>Канал</th><th>Этаж</th><th>Действия</th></tr></thead><tbody>';
               devs.forEach(d => {
-                const floorBadge = d.floor != null ? '<span style="background:var(--accent-dim);color:#fff;padding:1px 6px;border-radius:3px;font-size:11px;">эт.'+d.floor+'</span>' : '<span style="color:var(--muted);font-size:11px;">все</span>';
+                const floorBadge = d.floor != null ? '<span class="badge" style="background:var(--accent-dim);">эт.'+d.floor+'</span>' : '<span style="color:var(--muted);font-size:11px;">все</span>';
                 const chBadge = d.defaultChannel != null ? d.defaultChannel : '<span style="color:var(--muted);">—</span>';
                 html += '<tr>' +
-                  '<td>' + d.id + '</td>' +
+                  '<td><code>' + d.id + '</code></td>' +
                   '<td>' + (d.name || '') + '</td>' +
-                  '<td>' + (d.type || '') + '</td>' +
+                  '<td><span class="badge">' + (d.type || '') + '</span></td>' +
                   '<td>' + (d.role || '') + '</td>' +
-                  '<td>' + (d.host || '') + '</td>' +
+                  '<td><code>' + (d.host || '') + '</code></td>' +
                   '<td>' + chBadge + '</td>' +
                   '<td>' + floorBadge + '</td>' +
                   '<td>' +
-                    '<button type="button" class="dev-edit" data-device-id="' + d.id + '">Изменить</button> ' +
+                    '<button type="button" class="dev-edit secondary" data-device-id="' + d.id + '">Изменить</button> ' +
                     '<button type="button" class="dev-open-door secondary" data-device-id="' + d.id + '" data-device-name="' + (d.name || '#' + d.id).replace(/"/g, '&quot;') + '" title="Открыть дверь">🔓</button> ' +
-                    '<button type="button" class="dev-delete" data-device-id="' + d.id + '" data-device-name="' + (d.name || '#' + d.id).replace(/"/g, '&quot;') + '">Удалить</button>' +
+                    '<button type="button" class="dev-delete danger" data-device-id="' + d.id + '" data-device-name="' + (d.name || '#' + d.id).replace(/"/g, '&quot;') + '">Удалить</button>' +
                   '</td></tr>';
               });
-              html += '</table>';
+              html += '</tbody></table>';
             }
           }
           content.innerHTML = html;
@@ -619,7 +889,6 @@
             });
           });
           showCreateDeviceForm(buildings);
-          // Show NVR bulk channels section
           const nvrSec = document.getElementById('nvrChannelsSection');
           nvrSec.style.display = 'block';
           const nvrBldSel = document.getElementById('nvrBuildingId');
@@ -659,7 +928,7 @@
         else if (tab === 'complexes') url = API + '/complexes';
         else if (tab === 'buildings') url = API + '/buildings';
         else if (tab === 'users') url = API + '/users';
-        if (!url) { content.textContent = 'Неизвестная вкладка'; return; }
+        if (!url) { content.textContent = 'Неизвестный раздел'; return; }
         const r = await fetch(url, { headers: headers() });
         if (r.status === 401) { on401Response(); return; }
         if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
@@ -674,10 +943,10 @@
             const cells = keys.map(k => '<td>' + (row[k] != null ? String(row[k]) : '') + '</td>').join('');
             const blocked = row.isBlocked || (row.blockedUntil && new Date(row.blockedUntil) > new Date());
             const blockBtn = blocked
-              ? '<button type="button" class="user-unblock-btn" data-user-id="' + row.id + '">Разблокировать</button>'
-              : '<button type="button" class="user-block-btn" data-user-id="' + row.id + '">Заблокировать</button>';
+              ? '<button type="button" class="user-unblock-btn secondary" data-user-id="' + row.id + '">Разблокировать</button>'
+              : '<button type="button" class="user-block-btn secondary" data-user-id="' + row.id + '">Заблокировать</button>';
             const name = (row.email || row.phone || row.name || row.id || '').toString().replace(/"/g, '&quot;');
-            const delBtn = '<button type="button" class="user-delete-btn" data-user-id="' + row.id + '" data-name="' + name + '">Удалить</button>';
+            const delBtn = '<button type="button" class="user-delete-btn danger" data-user-id="' + row.id + '" data-name="' + name + '">Удалить</button>';
             return '<tr>' + cells + '<td>' + blockBtn + ' ' + delBtn + '</td></tr>';
           });
           let html = '';
@@ -687,20 +956,20 @@
             html += '<div class="card" id="createOrgAdminCard" style="margin-bottom:1rem;">' +
               '<h2>Создать администратора УК</h2>' +
               '<form id="createOrgAdminForm">' +
-              '<label>Email <input type="email" id="orgAdminEmail" placeholder="admin@uk.ru"></label> ' +
-              '<label>Телефон <input type="text" id="orgAdminPhone" placeholder="+79001234567"></label> ' +
-              '<label>Имя <input type="text" id="orgAdminName" placeholder="Иван Иванов"></label> ' +
-              '<label>Пароль <input type="password" id="orgAdminPassword" placeholder="мин. 6 символов" required></label><br>' +
-              '<label>Организация <select id="orgAdminOrgId" required>' + orgs.map(o => '<option value="' + o.id + '">' + (o.name || o.id) + '</option>').join('') + '</select></label> ' +
-              '<label>Роль <select id="orgAdminRole">' +
+              '<label for="orgAdminEmail">Email</label> <input type="email" id="orgAdminEmail" placeholder="admin@uk.ru"> ' +
+              '<label for="orgAdminPhone">Телефон</label> <input type="text" id="orgAdminPhone" placeholder="+79001234567"> ' +
+              '<label for="orgAdminName">Имя</label> <input type="text" id="orgAdminName" placeholder="Иван Иванов"> ' +
+              '<label for="orgAdminPassword">Пароль</label> <input type="password" id="orgAdminPassword" placeholder="мин. 6 символов" required>' +
+              '<label for="orgAdminOrgId">Организация</label> <select id="orgAdminOrgId" required>' + orgs.map(o => '<option value="' + o.id + '">' + (o.name || o.id) + '</option>').join('') + '</select> ' +
+              '<label for="orgAdminRole">Роль</label> <select id="orgAdminRole">' +
               '<option value="ORG_ADMIN">Админ УК</option><option value="COMPLEX_MANAGER">Менеджер ЖК</option>' +
-              '</select></label> ' +
+              '</select> ' +
               '<span id="orgAdminComplexWrap" style="display:none;">' +
-              '<label>ЖК <select id="orgAdminComplexId"><option value="">— выберите —</option>' + complexes.map(c => '<option value="' + c.id + '" data-org="' + (c.organizationId || '') + '">' + (c.name || c.id) + '</option>').join('') + '</select></label></span> ' +
+              '<label for="orgAdminComplexId">ЖК</label> <select id="orgAdminComplexId"><option value="">— выберите —</option>' + complexes.map(c => '<option value="' + c.id + '" data-org="' + (c.organizationId || '') + '">' + (c.name || c.id) + '</option>').join('') + '</select></span> ' +
               '<button type="submit">Создать</button>' +
               '</form><div id="createOrgAdminMsg" class="msg" style="display:none;"></div></div>';
           }
-          html += '<table><tr>' + keyRow + '</tr>' + rows.join('') + '</table>';
+          html += '<div style="overflow-x:auto;"><table><thead><tr>' + keyRow + '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
           content.innerHTML = html;
           content.querySelectorAll('.user-block-btn').forEach(btn => {
             btn.addEventListener('click', async function() {
@@ -792,10 +1061,10 @@
           const rows = data.map(row => {
             const cells = keys.map(k => '<td>' + (row[k] != null ? String(row[k]) : '') + '</td>').join('');
             const name = (row.name || row.id || '').toString().replace(/"/g, '&quot;');
-            const delBtn = '<button type="button" class="entity-delete-btn" data-tab="' + tab + '" data-id="' + (row.id ?? '').toString().replace(/"/g, '&quot;') + '" data-name="' + name + '">Удалить</button>';
+            const delBtn = '<button type="button" class="entity-delete-btn danger" data-tab="' + tab + '" data-id="' + (row.id ?? '').toString().replace(/"/g, '&quot;') + '" data-name="' + name + '">Удалить</button>';
             return '<tr>' + cells + '<td>' + delBtn + '</td></tr>';
           });
-          content.innerHTML = '<table><tr>' + keyRow + '</tr>' + rows.join('') + '</table>';
+          content.innerHTML = '<div style="overflow-x:auto;"><table><thead><tr>' + keyRow + '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
           content.querySelectorAll('.entity-delete-btn').forEach(btn => {
             btn.addEventListener('click', async function() {
               const entityTab = this.dataset.tab;
@@ -812,8 +1081,8 @@
             });
           });
         } else {
-          content.innerHTML = '<table><tr>' + keys.map(k => '<th>' + k + '</th>').join('') + '</tr>' +
-            data.map(row => '<tr>' + keys.map(k => '<td>' + (row[k] != null ? String(row[k]) : '') + '</td>').join('') + '</tr>').join('') + '</table>';
+          content.innerHTML = '<div style="overflow-x:auto;"><table><thead><tr>' + keys.map(k => '<th>' + k + '</th>').join('') + '</tr></thead><tbody>' +
+            data.map(row => '<tr>' + keys.map(k => '<td>' + (row[k] != null ? String(row[k]) : '') + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
         }
         addCreateForm(tab);
       } catch (e) {
@@ -829,22 +1098,21 @@
       if (r.status === 401) { on401Response(); return; }
       if (!r.ok) { list.textContent = 'Ошибка'; return; }
       const data = await r.json();
-      if (data.length === 0) { list.innerHTML = '<p>Нет квартир.</p>'; return; }
+      if (data.length === 0) { list.innerHTML = '<p style="color:var(--muted);">Нет квартир.</p>'; return; }
       const keys = Object.keys(data[0]).filter(k => k !== 'building');
       const keyRow = keys.map(k => '<th>' + k + '</th>').join('') + '<th>Действия</th>';
       const rows = data.map(row => {
         const cells = keys.map(k => '<td>' + (row[k] != null ? String(row[k]) : '') + '</td>').join('');
         const name = (row.number || row.id || '').toString().replace(/"/g, '&quot;');
         const ext = (row.extension != null ? String(row.extension) : '').replace(/"/g, '&quot;');
-        const editBtn = '<button type="button" class="apt-edit-btn" data-id="' + row.id + '" data-name="' + name + '" data-extension="' + ext + '">Изменить</button>';
-        const delBtn = '<button type="button" class="apt-delete-btn" data-id="' + row.id + '" data-name="' + name + '">Удалить</button>';
+        const editBtn = '<button type="button" class="apt-edit-btn secondary" data-id="' + row.id + '" data-name="' + name + '" data-extension="' + ext + '">Изменить</button>';
+        const delBtn = '<button type="button" class="apt-delete-btn danger" data-id="' + row.id + '" data-name="' + name + '">Удалить</button>';
         return '<tr>' + cells + '<td>' + editBtn + ' ' + delBtn + '</td></tr>';
       });
-      list.innerHTML = '<table><tr>' + keyRow + '</tr>' + rows.join('') + '</table>';
+      list.innerHTML = '<div style="overflow-x:auto;"><table><thead><tr>' + keyRow + '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
       list.querySelectorAll('.apt-edit-btn').forEach(btn => {
         btn.addEventListener('click', async function() {
           const id = this.dataset.id;
-          const name = this.dataset.name || id;
           const currentExt = this.dataset.extension || '';
           const newExt = prompt('Расширение (SIP/номер для вызова монитора). Оставьте пустым, чтобы убрать.', currentExt);
           if (newExt === null) return;
@@ -887,10 +1155,10 @@
       if (r.status === 401) { on401Response(); return; }
       if (!r.ok) { el.textContent = 'Ошибка'; return; }
       const list = await r.json();
-      if (list.length === 0) { el.innerHTML = '<p>Нет привязанных жителей.</p>'; return; }
+      if (list.length === 0) { el.innerHTML = '<p style="color:var(--muted);">Нет привязанных жителей.</p>'; return; }
       const userLabel = (ua) => (ua.user ? (ua.user.email || ua.user.phone || ua.userId) : ua.userId);
-      el.innerHTML = '<table><tr><th>User ID</th><th>Роль</th><th>Действие</th></tr>' +
-        list.map(ua => '<tr><td>' + userLabel(ua) + '</td><td>' + (ua.role || '') + '</td><td><button type="button" data-remove="' + ua.userId + '" data-label="' + String(userLabel(ua)).replace(/"/g, '&quot;') + '">Удалить</button></td></tr>').join('') + '</table>';
+      el.innerHTML = '<table><thead><tr><th>Пользователь</th><th>Роль</th><th>Действие</th></tr></thead><tbody>' +
+        list.map(ua => '<tr><td>' + userLabel(ua) + '</td><td>' + (ua.role || '') + '</td><td><button type="button" class="danger" data-remove="' + ua.userId + '" data-label="' + String(userLabel(ua)).replace(/"/g, '&quot;') + '">Удалить</button></td></tr>').join('') + '</tbody></table>';
       el.querySelectorAll('[data-remove]').forEach(btn => {
         btn.addEventListener('click', async function() {
           const label = this.dataset.label || this.dataset.remove;
@@ -942,18 +1210,18 @@
       container.innerHTML =
         '<input type="hidden" id="devEditId" value="' + (editDevice ? editDevice.id : '') + '">' +
         '<form id="formAddDevice" style="flex-wrap:wrap;">' +
-        '<label>Здание <select id="devBuildingId">' + buildings.map(b => '<option value="' + b.id + '"' + (editDevice && b.id === editDevice.buildingId ? ' selected' : '') + '>' + (b.name || b.id) + '</option>').join('') + '</select></label> ' +
+        '<label for="devBuildingId">Здание</label> <select id="devBuildingId">' + buildings.map(b => '<option value="' + b.id + '"' + (editDevice && b.id === editDevice.buildingId ? ' selected' : '') + '>' + (b.name || b.id) + '</option>').join('') + '</select> ' +
         '<input id="devName" placeholder="Имя" required value="' + (editDevice ? (editDevice.name || '').replace(/"/g, '&quot;') : '') + '"> ' +
         '<input id="devHost" placeholder="Host (IP)" required value="' + (editDevice ? (editDevice.host || '').replace(/"/g, '&quot;') : '') + '"> ' +
-        '<select id="devType"><option value="AKUVOX"' + (editDevice && editDevice.type === 'AKUVOX' ? ' selected' : '') + '>Akuvox</option><option value="UNIVIEW_IPC"' + (editDevice && editDevice.type === 'UNIVIEW_IPC' ? ' selected' : '') + '>Uniview IPC</option><option value="UNIVIEW_NVR"' + (editDevice && editDevice.type === 'UNIVIEW_NVR' ? ' selected' : '') + '>Uniview NVR</option><option value="OTHER"' + (editDevice && editDevice.type === 'OTHER' ? ' selected' : '') + '>Other</option></select> ' +
-        '<select id="devRole"><option value="DOORPHONE"' + (editDevice && editDevice.role === 'DOORPHONE' ? ' selected' : '') + '>Домофон</option><option value="CAMERA"' + (editDevice && editDevice.role === 'CAMERA' ? ' selected' : '') + '>Камера</option><option value="NVR"' + (editDevice && editDevice.role === 'NVR' ? ' selected' : '') + '>NVR</option></select> ' +
+        '<label for="devType">Тип</label> <select id="devType"><option value="AKUVOX"' + (editDevice && editDevice.type === 'AKUVOX' ? ' selected' : '') + '>Akuvox</option><option value="UNIVIEW_IPC"' + (editDevice && editDevice.type === 'UNIVIEW_IPC' ? ' selected' : '') + '>Uniview IPC</option><option value="UNIVIEW_NVR"' + (editDevice && editDevice.type === 'UNIVIEW_NVR' ? ' selected' : '') + '>Uniview NVR</option><option value="OTHER"' + (editDevice && editDevice.type === 'OTHER' ? ' selected' : '') + '>Other</option></select> ' +
+        '<label for="devRole">Роль</label> <select id="devRole"><option value="DOORPHONE"' + (editDevice && editDevice.role === 'DOORPHONE' ? ' selected' : '') + '>Домофон</option><option value="CAMERA"' + (editDevice && editDevice.role === 'CAMERA' ? ' selected' : '') + '>Камера</option><option value="NVR"' + (editDevice && editDevice.role === 'NVR' ? ' selected' : '') + '>NVR</option></select> ' +
         '<input id="devUser" placeholder="Логин" value="' + (editDevice && editDevice.username ? String(editDevice.username).replace(/"/g, '&quot;') : '') + '"> ' +
         '<input id="devPass" type="password" placeholder="Пароль" value="' + (editDevice && editDevice.password ? String(editDevice.password) : '') + '"> ' +
         '<input id="devHttpPort" type="number" placeholder="HTTP порт (80)" style="width:110px;" value="' + (editDevice && editDevice.httpPort != null ? editDevice.httpPort : 80) + '"> ' +
         '<input id="devRtspPort" type="number" placeholder="RTSP порт (554)" style="width:110px;" value="' + (editDevice && editDevice.rtspPort != null ? editDevice.rtspPort : 554) + '"> ' +
         '<input id="devChannel" type="number" placeholder="Канал" style="width:80px;" value="' + (editDevice && editDevice.defaultChannel != null ? editDevice.defaultChannel : '') + '"> ' +
         '<input id="devStream" placeholder="Поток (main)" style="width:100px;" value="' + (editDevice && editDevice.defaultStream ? String(editDevice.defaultStream).replace(/"/g, '&quot;') : '') + '"> ' +
-        '<input id="devFloor" type="number" placeholder="Этаж (пусто=все)" style="width:130px;" value="' + (editDevice && editDevice.floor != null ? editDevice.floor : '') + '" title="Ограничение видимости: пусто — камеру видят все жители; число — только жители этого этажа"> ' +
+        '<input id="devFloor" type="number" placeholder="Этаж (пусто=все)" style="width:130px;" value="' + (editDevice && editDevice.floor != null ? editDevice.floor : '') + '" title="пусто — видят все; число — только этот этаж"> ' +
         '<input id="devCustomRtsp" placeholder="Свой RTSP URL (необяз.)" style="width:260px;" value="' + (editDevice && editDevice.customRtspUrl ? String(editDevice.customRtspUrl).replace(/"/g, '&quot;') : '') + '" title="Если заполнено — используется вместо LiteAPI. Пример: rtsp://192.168.1.100:554/live"> ' +
         '<button type="submit">' + (isEdit ? 'Сохранить' : 'Добавить') + '</button> ' +
         (isEdit ? '<button type="button" id="devCancelEdit" class="secondary">Отмена</button> ' : '') +
@@ -992,10 +1260,7 @@
           if (d.reachable) {
             const fmt = (v) => {
               if (v == null) return String(v);
-              if (typeof v === 'object') {
-                const s = JSON.stringify(v);
-                return s.length > 80 ? s.slice(0, 77) + '...' : s;
-              }
+              if (typeof v === 'object') { const s = JSON.stringify(v); return s.length > 80 ? s.slice(0, 77) + '...' : s; }
               return String(v);
             };
             const info = d.info ? ' | ' + Object.entries(d.info).slice(0, 5).map(([k,v]) => k + ': ' + fmt(v)).join(', ') : '';
@@ -1082,7 +1347,7 @@
       if (tab === 'organizations' && currentUser && currentUser.role === 'SUPER_ADMIN') {
         sec.style.display = 'block';
         title.textContent = 'Создать организацию';
-        container.innerHTML = '<form id="formCreateOrg"><input id="orgName" placeholder="Название" required> <input id="orgPlan" placeholder="Тариф (basic)" value="basic"> <input id="orgMax" type="number" placeholder="max_complexes" value="10" min="1"> <button type="submit">Создать</button></form>';
+        container.innerHTML = '<form id="formCreateOrg"><label for="orgName">Название</label> <input id="orgName" placeholder="ООО Управляющая компания" required> <label for="orgPlan">Тариф</label> <input id="orgPlan" placeholder="basic" value="basic"> <label for="orgMax">max_complexes</label> <input id="orgMax" type="number" placeholder="10" value="10" min="1"> <button type="submit">Создать</button></form>';
         container.querySelector('#formCreateOrg').addEventListener('submit', async function(e) {
           e.preventDefault();
           const r = await fetch(API + '/organizations', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ name: document.getElementById('orgName').value.trim(), subscriptionPlan: document.getElementById('orgPlan').value.trim() || 'basic', maxComplexes: parseInt(document.getElementById('orgMax').value, 10) || 10 }) });
@@ -1096,7 +1361,7 @@
         (async () => {
           const orgs = await (await fetch(API + '/organizations', { headers: headers() })).json();
           const orgOptions = Array.isArray(orgs) ? orgs.map(o => '<option value="' + o.id + '">' + (o.name || o.id) + '</option>').join('') : '';
-          container.innerHTML = '<form id="formCreateComplex"><label>Организация <select id="complexOrgId">' + orgOptions + '</select></label> <input id="complexName" placeholder="Название ЖК" required> <input id="complexAddr" placeholder="Адрес"> <button type="submit">Создать</button></form>';
+          container.innerHTML = '<form id="formCreateComplex"><label for="complexOrgId">Организация</label> <select id="complexOrgId">' + orgOptions + '</select> <label for="complexName">Название</label> <input id="complexName" placeholder="ЖК Солнечный" required> <label for="complexAddr">Адрес</label> <input id="complexAddr" placeholder="Адрес"> <button type="submit">Создать</button></form>';
           container.querySelector('#formCreateComplex').addEventListener('submit', async function(e) {
             e.preventDefault();
             const r = await fetch(API + '/complexes', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ organizationId: document.getElementById('complexOrgId').value, name: document.getElementById('complexName').value.trim(), address: document.getElementById('complexAddr').value.trim() || undefined }) });
@@ -1111,7 +1376,7 @@
         (async () => {
           const complexes = await (await fetch(API + '/complexes', { headers: headers() })).json();
           const opts = Array.isArray(complexes) ? complexes.map(c => '<option value="' + c.id + '">' + (c.name || c.id) + '</option>').join('') : '';
-          container.innerHTML = '<form id="formCreateBuilding"><label>ЖК <select id="buildingComplexId">' + opts + '</select></label> <input id="buildingName" placeholder="Название здания" required> <input id="buildingAddr" placeholder="Адрес"> <button type="submit">Создать</button></form>';
+          container.innerHTML = '<form id="formCreateBuilding"><label for="buildingComplexId">ЖК</label> <select id="buildingComplexId">' + opts + '</select> <label for="buildingName">Название</label> <input id="buildingName" placeholder="Корпус 1" required> <label for="buildingAddr">Адрес</label> <input id="buildingAddr" placeholder="Адрес"> <button type="submit">Создать</button></form>';
           container.querySelector('#formCreateBuilding').addEventListener('submit', async function(e) {
             e.preventDefault();
             const r = await fetch(API + '/buildings', { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ complexId: document.getElementById('buildingComplexId').value, name: document.getElementById('buildingName').value.trim(), address: document.getElementById('buildingAddr').value.trim() || undefined }) });
@@ -1126,7 +1391,7 @@
         (async () => {
           const buildings = await (await fetch(API + '/buildings', { headers: headers() })).json();
           const opts = Array.isArray(buildings) ? buildings.map(b => '<option value="' + b.id + '">' + (b.name || b.id) + '</option>').join('') : '';
-          container.innerHTML = '<form id="formCreateApt"><label>Здание <select id="aptBuildingId">' + opts + '</select></label> <input id="aptNumber" placeholder="Номер квартиры" required> <input id="aptFloor" type="number" placeholder="Этаж"> <input id="aptExtension" placeholder="Расширение (SIP/номер для вызова монитора)"> <button type="submit">Создать</button></form>';
+          container.innerHTML = '<form id="formCreateApt"><label for="aptBuildingId">Здание</label> <select id="aptBuildingId">' + opts + '</select> <label for="aptNumber">Номер</label> <input id="aptNumber" placeholder="Номер квартиры" required> <label for="aptFloor">Этаж</label> <input id="aptFloor" type="number" placeholder="Этаж"> <label for="aptExtension">Расширение</label> <input id="aptExtension" placeholder="SIP/номер монитора"> <button type="submit">Создать</button></form>';
           container.querySelector('#formCreateApt').addEventListener('submit', async function(e) {
             e.preventDefault();
             const body = { buildingId: parseInt(document.getElementById('aptBuildingId').value, 10), number: document.getElementById('aptNumber').value.trim() };
