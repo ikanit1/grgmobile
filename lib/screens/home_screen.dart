@@ -8,6 +8,7 @@ import '../services/events_socket_service.dart';
 import '../models/device_settings.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/skeleton_card.dart';
 import '../widgets/slide_route.dart';
 import 'add_device_screen.dart';
 import 'applications_screen.dart';
@@ -333,7 +334,10 @@ class _BackendHomeContentState extends State<_BackendHomeContent> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.purple));
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: List.generate(3, (_) => const SkeletonBuildingCard()),
+      );
     }
     if (_error != null) {
       return Padding(
@@ -574,7 +578,7 @@ class _RecentEventsBlock extends StatelessWidget {
                             ),
                           )
                         else
-                          const SizedBox(width: 40, height: 30, child: Icon(Icons.circle, size: 8, color: AppColors.textSecondary)),
+                          _EventIcon(eventType: e.eventType),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
@@ -698,7 +702,7 @@ class _BuildingCard extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(4),
+          padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               Container(
@@ -972,6 +976,42 @@ class _BuildingDevicesScreenState extends State<_BuildingDevicesScreen> {
                         );
                       },
                     ),
+    );
+  }
+}
+
+class _EventIcon extends StatelessWidget {
+  const _EventIcon({required this.eventType});
+  final String eventType;
+
+  IconData _icon() {
+    final t = eventType.toLowerCase();
+    if (t.contains('door_open'))                               return Icons.lock_open_rounded;
+    if (t.contains('incoming_call') || t.contains('doorbell')) return Icons.call_rounded;
+    if (t.contains('motion') || t.contains('vmd'))             return Icons.directions_run;
+    if (t.contains('alarm') || t.contains('io'))               return Icons.notifications_active;
+    return Icons.sensors;
+  }
+
+  Color _color() {
+    final t = eventType.toLowerCase();
+    if (t.contains('door_open'))                               return AppColors.success;
+    if (t.contains('incoming_call') || t.contains('doorbell')) return AppColors.textSecondary;
+    if (t.contains('motion') || t.contains('vmd'))             return AppColors.warning;
+    if (t.contains('alarm') || t.contains('io'))               return AppColors.danger;
+    return AppColors.textSecondary;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        color: _color().withOpacity(0.15),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Icon(_icon(), size: 14, color: _color()),
     );
   }
 }

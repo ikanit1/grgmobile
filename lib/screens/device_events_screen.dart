@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../api/backend_client.dart';
 import '../services/events_socket_service.dart';
+import '../theme/app_theme.dart';
+import '../widgets/skeleton_card.dart';
 
 class DeviceEventsScreen extends StatefulWidget {
   const DeviceEventsScreen({
@@ -85,12 +87,30 @@ class _DeviceEventsScreenState extends State<DeviceEventsScreen> {
 
   IconData _eventIcon(String type) {
     final lower = type.toLowerCase();
-    if (lower.contains('door_open')) return Icons.door_front_door;
-    if (lower.contains('incoming_call') || lower.contains('doorbell')) return Icons.phone_callback;
-    if (lower.contains('motion') || lower.contains('vmd')) return Icons.directions_run;
-    if (lower.contains('alarm') || lower.contains('io')) return Icons.warning_amber;
-    if (lower.contains('tamper')) return Icons.security;
-    return Icons.event_note;
+    if (lower.contains('door_open'))                              return Icons.lock_open_rounded;
+    if (lower.contains('incoming_call') || lower.contains('doorbell')) return Icons.call_rounded;
+    if (lower.contains('motion') || lower.contains('vmd'))        return Icons.directions_run;
+    if (lower.contains('alarm') || lower.contains('io'))          return Icons.notifications_active;
+    if (lower.contains('tamper'))                                 return Icons.security;
+    return Icons.sensors;
+  }
+
+  Color _eventIconBg(String type) {
+    final lower = type.toLowerCase();
+    if (lower.contains('door_open'))                              return AppColors.success.withOpacity(0.18);
+    if (lower.contains('incoming_call') || lower.contains('doorbell')) return AppColors.purple.withOpacity(0.20);
+    if (lower.contains('motion') || lower.contains('vmd'))        return AppColors.warning.withOpacity(0.18);
+    if (lower.contains('alarm') || lower.contains('io'))          return AppColors.danger.withOpacity(0.18);
+    return AppColors.border;
+  }
+
+  Color _eventIconColor(String type) {
+    final lower = type.toLowerCase();
+    if (lower.contains('door_open'))                              return AppColors.success;
+    if (lower.contains('incoming_call') || lower.contains('doorbell')) return AppColors.textSecondary;
+    if (lower.contains('motion') || lower.contains('vmd'))        return AppColors.warning;
+    if (lower.contains('alarm') || lower.contains('io'))          return AppColors.danger;
+    return AppColors.textSecondary;
   }
 
   @override
@@ -119,12 +139,17 @@ class _DeviceEventsScreenState extends State<DeviceEventsScreen> {
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    children: List.generate(5, (_) => const SkeletonEventItem()),
+                  )
                 : _error != null
                     ? Center(child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(_error!, style: const TextStyle(color: Colors.red)),
+                          Icon(Icons.error_outline, color: AppColors.danger, size: 40),
+                          const SizedBox(height: 12),
+                          Text(_error!, style: const TextStyle(color: AppColors.danger)),
                           const SizedBox(height: 12),
                           ElevatedButton(onPressed: _load, child: const Text('Повторить')),
                         ],
@@ -135,14 +160,28 @@ class _DeviceEventsScreenState extends State<DeviceEventsScreen> {
                             onRefresh: _load,
                             child: ListView.separated(
                               itemCount: filtered.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              separatorBuilder: (_, __) => Divider(height: 1, color: AppColors.border),
                               itemBuilder: (ctx, i) {
                                 final e = filtered[i];
                                 return ListTile(
-                                  leading: Icon(_eventIcon(e.type)),
+                                  leading: Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: _eventIconBg(e.type),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(_eventIcon(e.type), size: 18, color: _eventIconColor(e.type)),
+                                  ),
                                   title: Text(_eventTypeLabel(e.type)),
-                                  subtitle: Text(e.time.isNotEmpty ? e.time : '—'),
-                                  trailing: Text(e.source, style: Theme.of(context).textTheme.bodySmall),
+                                  subtitle: Text(
+                                    e.time.isNotEmpty ? e.time : '—',
+                                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                                  ),
+                                  trailing: Text(
+                                    e.source,
+                                    style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                                  ),
                                 );
                               },
                             ),

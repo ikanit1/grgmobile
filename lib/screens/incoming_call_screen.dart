@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -80,6 +81,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   }
 
   Future<void> _openDoor() async {
+    HapticFeedback.mediumImpact();
     setState(() => _openDoorLoading = true);
     try {
       final result = await widget.client.openDoor(widget.deviceId);
@@ -87,7 +89,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(result.success ? 'Дверь открыта' : result.message),
-          backgroundColor: result.success ? Colors.green : AppColors.danger,
+          backgroundColor: result.success ? AppColors.success : AppColors.danger,
         ),
       );
       if (result.success) widget.onDismiss();
@@ -126,34 +128,57 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.door_front_door, color: AppColors.purple, size: 32),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Входящий звонок',
-                          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
-                        if (subtitle.isNotEmpty)
-                          Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                      ],
+                  Text(
+                    'ВХОДЯЩИЙ',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.5,
                     ),
                   ),
+                  const SizedBox(height: 4),
+                  if (subtitle.isNotEmpty)
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                 ],
               ),
             ),
             Expanded(child: Center(child: _buildVideoArea())),
             Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _actionButton(icon: Icons.call_end, label: 'Сбросить', color: AppColors.danger, onPressed: widget.onDismiss),
-                  _actionButton(icon: Icons.lock_open, label: _openDoorLoading ? '...' : 'Открыть', color: AppColors.success, onPressed: _openDoorLoading ? null : _openDoor),
-                  _actionButton(icon: Icons.videocam, label: 'Ответить', color: AppColors.purple, onPressed: _answer),
+                  _secondaryButton(
+                    icon: Icons.call_end_rounded,
+                    label: 'Сбросить',
+                    size: 56,
+                    bg: AppColors.danger.withOpacity(0.20),
+                    fg: AppColors.danger,
+                    labelColor: const Color(0xFFFF9CB1),
+                    onPressed: widget.onDismiss,
+                  ),
+                  _primaryOpenButton(),
+                  _secondaryButton(
+                    icon: Icons.videocam_rounded,
+                    label: 'Ответить',
+                    size: 56,
+                    bg: AppColors.purple.withOpacity(0.25),
+                    fg: const Color(0xFFC9A6FF),
+                    labelColor: const Color(0xFFC9A6FF),
+                    onPressed: _answer,
+                  ),
                 ],
               ),
             ),
@@ -180,21 +205,84 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     return const Icon(Icons.videocam_off, size: 64, color: Colors.white38);
   }
 
-  Widget _actionButton({required IconData icon, required String label, required Color color, required VoidCallback? onPressed}) {
+  Widget _primaryOpenButton() {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton.filled(
-          onPressed: onPressed,
-          icon: Icon(icon),
-          style: IconButton.styleFrom(
-            backgroundColor: color.withValues(alpha: 0.3),
-            foregroundColor: color,
-            padding: const EdgeInsets.all(16),
+        GestureDetector(
+          onTap: _openDoorLoading ? null : _openDoor,
+          child: Container(
+            width: 84,
+            height: 84,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                colors: [Color(0xFF52E5B8), Color(0xFF3DD598)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.success.withOpacity(0.18),
+                  spreadRadius: 8,
+                  blurRadius: 0,
+                ),
+                BoxShadow(
+                  color: AppColors.success.withOpacity(0.50),
+                  blurRadius: 30,
+                  offset: const Offset(0, 14),
+                ),
+              ],
+            ),
+            child: _openDoorLoading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF06281D),
+                      strokeWidth: 2.5,
+                    ),
+                  )
+                : const Icon(Icons.lock_open_rounded, size: 36, color: Color(0xFF06281D)),
           ),
         ),
-        const SizedBox(height: 4),
-        Text(label, style: TextStyle(color: color, fontSize: 12)),
+        const SizedBox(height: 8),
+        const Text(
+          'Открыть дверь',
+          style: TextStyle(
+            color: Color(0xFFA7FFD6),
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _secondaryButton({
+    required IconData icon,
+    required String label,
+    required double size,
+    required Color bg,
+    required Color fg,
+    required Color labelColor,
+    required VoidCallback? onPressed,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: onPressed,
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: bg),
+            child: Icon(icon, size: size * 0.42, color: fg),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: TextStyle(color: labelColor, fontSize: 12, fontWeight: FontWeight.w500),
+        ),
       ],
     );
   }
