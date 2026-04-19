@@ -7,6 +7,7 @@ import '../models/auth_user.dart';
 import '../services/events_socket_service.dart';
 import '../models/device_settings.dart';
 import '../theme/app_theme.dart';
+import '../utils/event_style.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/skeleton_card.dart';
 import '../widgets/slide_route.dart';
@@ -1032,34 +1033,17 @@ class _EventIcon extends StatelessWidget {
   const _EventIcon({required this.eventType});
   final String eventType;
 
-  IconData _icon() {
-    final t = eventType.toLowerCase();
-    if (t.contains('door_open'))                               return Icons.lock_open_rounded;
-    if (t.contains('incoming_call') || t.contains('doorbell')) return Icons.call_rounded;
-    if (t.contains('motion') || t.contains('vmd'))             return Icons.directions_run;
-    if (t.contains('alarm') || t.contains('io'))               return Icons.notifications_active;
-    return Icons.sensors;
-  }
-
-  Color _color() {
-    final t = eventType.toLowerCase();
-    if (t.contains('door_open'))                               return AppColors.success;
-    if (t.contains('incoming_call') || t.contains('doorbell')) return AppColors.textSecondary;
-    if (t.contains('motion') || t.contains('vmd'))             return AppColors.warning;
-    if (t.contains('alarm') || t.contains('io'))               return AppColors.danger;
-    return AppColors.textSecondary;
-  }
-
   @override
   Widget build(BuildContext context) {
+    final style = eventStyle(eventType);
     return Container(
       width: 28,
       height: 28,
       decoration: BoxDecoration(
-        color: _color().withOpacity(0.15),
+        color: style.tileColor,
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Icon(_icon(), size: 14, color: _color()),
+      child: Icon(style.icon, size: 14, color: style.iconColor),
     );
   }
 }
