@@ -1,0 +1,397 @@
+name: Repository Audit
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine changed files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+
+          # Handle first push (no previous commit)
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ] || [ -z "$BASE" ]; then
+            CHANGED=$(git diff-tree --no-commit-id -r --name-only "$HEAD" 2>/dev/null || git show --name-only --pretty="" "$HEAD")
+          else
+            CHANGED=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || echo "")
+          fi
+
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # Flags for affected areas
+          echo "$CHANGED" | grep -q "^backend/" && echo "has_backend=true" >> $GITHUB_OUTPUT || echo "has_backend=false" >> $GITHUB_OUTPUT
+          echo "$CHANGED" | grep -q "^lib/" && echo "has_flutter=true" >> $GITHUB_OUTPUT || echo "has_flutter=false" >> $GITHUB_OUTPUT
+          echo "$CHANGED" | grep -qE "(go2rtc|rtsp|stream|live)" && echo "has_streaming=true" >> $GITHUB_OUTPUT || echo "has_streaming=false" >> $GITHUB_OUTPUT
+
+      - name: Audit backend changes
+        id: backend_audit
+        if: steps.changed.outputs.has_backend == 'true'
+        run: |
+          ISSUES=""
+          NOTES=""
+
+          CHANGED_FILES="${{ steps.changed.outputs.files }}"
+
+          # --- Migration / schema checks ---
+          MIGRATION_FILES=$(echo "$CHANGED_FILES" | grep -E "migration|\.sql$" || true)
+          if [ -n "$MIGRATION_FILES" ]; then
+            NOTES+="📋 Найдены файлы миграций/SQL:\n"
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              NOTES+="  • $f\n"
+              # Check for destructive operations without safety guards
+              if [ -f "$f" ]; then
+                if grep -qiE "DROP TABLE|DROP COLUMN|TRUNCATE" "$f"; then
+                  ISSUES+="⚠️ Деструктивная операция в $f (DROP/TRUNCATE)\n"
+                fi
+                if grep -qiE "ALTER TABLE.*NOT NULL" "$f" && ! grep -qiE "DEFAULT|ADD COLUMN" "$f"; then
+                  ISSUES+="⚠️ NOT NULL без DEFAULT в $f — риск для существующих строк\n"
+                fi
+              fi
+            done <<< "$MIGRATION_FILES"
+          fi
+
+          # --- Entity / TypeORM schema changes ---
+          ENTITY_FILES=$(echo "$CHANGED_FILES" | grep -E "\.entity\.ts$" || true)
+          if [ -n "$ENTITY_FILES" ]; then
+            NOTES+="🗄️ Изменены TypeORM-сущности:\n"
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              NOTES+="  • $f\n"
+              if [ -f "$f" ]; then
+                if grep -qE "@Column\(" "$f" && ! grep -qE "nullable|default" "$f"; then
+                  ISSUES+="⚠️ Новые @Column без nullable/default в $f — возможны проблемы при synchronize\n"
+                fi
+              fi
+            done <<< "$ENTITY_FILES"
+          fi
+
+          # --- New controllers / endpoints ---
+          CONTROLLER_FILES=$(echo "$CHANGED_FILES" | grep -E "\.controller\.ts$" || true)
+          if [ -n "$CONTROLLER_FILES" ]; then
+            NOTES+="🔌 Изменены контроллеры:\n"
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              NOTES+="  • $f\n"
+              if [ -f "$f" ]; then
+                # Check for missing auth guards
+                if grep -qE "@Get|@Post|@Put|@Delete|@Patch" "$f"; then
+                  if ! grep -qE "@UseGuards|@Public|JwtAuthGuard" "$f"; then
+                    ISSUES+="⚠️ Эндпоинты без @UseGuards в $f — возможно отсутствует защита\n"
+                  fi
+                fi
+                # Check for missing error handling in async methods
+                if grep -qE "async.*\(" "$f" && ! grep -qE "try|catch|HttpException" "$f"; then
+                  ISSUES+="💡 Нет обработки ошибок (try/catch) в $f\n"
+                fi
+              fi
+            done <<< "$CONTROLLER_FILES"
+          fi
+
+          # --- Module imports check ---
+          MODULE_FILES=$(echo "$CHANGED_FILES" | grep -E "\.module\.ts$" || true)
+          if [ -n "$MODULE_FILES" ]; then
+            NOTES+="📦 Изменены модули:\n"
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              NOTES+="  • $f\n"
+            done <<< "$MODULE_FILES"
+          fi
+
+          # --- Credentials / encryption ---
+          CRED_FILES=$(echo "$CHANGED_FILES" | grep -E "credential|encrypt|decrypt" || true)
+          if [ -n "$CRED_FILES" ]; then
+            ISSUES+="🔐 Изменены файлы работы с учётными данными — требуется внимательная проверка:\n"
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              ISSUES+="  • $f\n"
+              if [ -f "$f" ]; then
+                if grep -qiE "console\.log.*password|console\.log.*token|console\.log.*secret" "$f"; then
+                  ISSUES+="🚨 КРИТИЧНО: логирование чувствительных данных в $f\n"
+                fi
+              fi
+            done <<< "$CRED_FILES"
+          fi
+
+          # Fallback message
+          if [ -z "$NOTES" ] && [ -z "$ISSUES" ]; then
+            NOTES="• Затронуты вспомогательные backend-файлы без критичных изменений схемы\n"
+          fi
+
+          echo "issues<<EOF" >> $GITHUB_OUTPUT
+          printf "%b" "$ISSUES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          printf "%b" "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Audit Flutter changes
+        id: flutter_audit
+        if: steps.changed.outputs.has_flutter == 'true'
+        run: |
+          ISSUES=""
+          NOTES=""
+
+          CHANGED_FILES="${{ steps.changed.outputs.files }}"
+
+          # Screen files
+          SCREEN_FILES=$(echo "$CHANGED_FILES" | grep "^lib/screens/" || true)
+          if [ -n "$SCREEN_FILES" ]; then
+            NOTES+="📱 Изменены экраны Flutter:\n"
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              NOTES+="  • $f\n"
+              if [ -f "$f" ]; then
+                # Check for hardcoded strings (i18n concern)
+                HARDCODED=$(grep -cE '"[А-Яа-яA-Za-z ]{5,}"' "$f" 2>/dev/null || echo "0")
+                if [ "$HARDCODED" -gt 5 ]; then
+                  NOTES+="    💡 Много хардкод-строк ($HARDCODED) — рассмотреть локализацию\n"
+                fi
+                # Missing error handling for async
+                if grep -qE "async|await" "$f" && ! grep -qE "catch|onError|try" "$f"; then
+                  ISSUES+="⚠️ Нет обработки ошибок async/await в $f\n"
+                fi
+              fi
+            done <<< "$SCREEN_FILES"
+          fi
+
+          # Widget files
+          WIDGET_FILES=$(echo "$CHANGED_FILES" | grep "^lib/widgets/" || true)
+          if [ -n "$WIDGET_FILES" ]; then
+            NOTES+="🧩 Изменены виджеты:\n"
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              NOTES+="  • $f\n"
+            done <<< "$WIDGET_FILES"
+          fi
+
+          # API client changes
+          API_FILES=$(echo "$CHANGED_FILES" | grep "^lib/api/" || true)
+          if [ -n "$API_FILES" ]; then
+            NOTES+="🌐 Изменён HTTP-клиент / хранилище токенов:\n"
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              NOTES+="  • $f\n"
+              if [ -f "$f" ]; then
+                if grep -qiE "print.*token|print.*password|debugPrint.*token" "$f"; then
+                  ISSUES+="🚨 КРИТИЧНО: логирование токена/пароля в $f\n"
+                fi
+              fi
+            done <<< "$API_FILES"
+          fi
+
+          # Model files
+          MODEL_FILES=$(echo "$CHANGED_FILES" | grep "^lib/models/" || true)
+          if [ -n "$MODEL_FILES" ]; then
+            NOTES+="📊 Изменены модели данных Flutter:\n"
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              NOTES+="  • $f\n"
+            done <<< "$MODEL_FILES"
+          fi
+
+          # pubspec.yaml — dependency changes
+          if echo "$CHANGED_FILES" | grep -q "pubspec.yaml"; then
+            NOTES+="📦 Изменён pubspec.yaml — проверьте совместимость зависимостей\n"
+          fi
+
+          if [ -z "$NOTES" ] && [ -z "$ISSUES" ]; then
+            NOTES="• Затронуты вспомогательные Flutter-файлы без критичных изменений\n"
+          fi
+
+          echo "issues<<EOF" >> $GITHUB_OUTPUT
+          printf "%b" "$ISSUES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          printf "%b" "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Audit streaming endpoints
+        id: streaming_audit
+        if: steps.changed.outputs.has_streaming == 'true'
+        run: |
+          ISSUES=""
+          NOTES=""
+
+          CHANGED_FILES="${{ steps.changed.outputs.files }}"
+
+          STREAM_FILES=$(echo "$CHANGED_FILES" | grep -iE "go2rtc|rtsp|stream|live" || true)
+
+          NOTES+="🎥 Затронуты файлы видеостриминга:\n"
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            NOTES+="  • $f\n"
+            if [ -f "$f" ]; then
+              # Check error handling
+              if grep -qiE "rtsp|go2rtc|stream" "$f"; then
+                if ! grep -qE "try|catch|error|Error|exception|Exception|HttpException" "$f"; then
+                  ISSUES+="⚠️ Нет обработки ошибок стриминга в $f\n"
+                fi
+                if ! grep -qE "timeout|Timeout" "$f"; then
+                  ISSUES+="💡 Нет таймаута для стриминга в $f — рекомендуется добавить\n"
+                fi
+                # Check auth on streaming endpoints
+                if grep -qE "@Get|@Post" "$f" && ! grep -qE "@UseGuards|JwtAuthGuard|@Public" "$f"; then
+                  ISSUES+="🚨 Стриминг-эндпоинт без аутентификации в $f\n"
+                fi
+              fi
+            fi
+          done <<< "$STREAM_FILES"
+
+          echo "issues<<EOF" >> $GITHUB_OUTPUT
+          printf "%b" "$ISSUES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          printf "%b" "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Build Telegram report
+        id: report
+        run: |
+          EVENT="${{ github.event_name }}"
+          REPO="${{ github.repository }}"
+          ACTOR="${{ github.actor }}"
+          REF="${{ github.ref_name }}"
+          SHA="${{ github.sha }}"
+          SHORT_SHA="${SHA:0:7}"
+
+          if [ "$EVENT" = "pull_request" ]; then
+            PR_NUM="${{ github.event.pull_request.number }}"
+            PR_TITLE="${{ github.event.pull_request.title }}"
+            HEADER="🔀 *Pull Request #${PR_NUM}*"
+            SUBHEADER="${PR_TITLE}"
+          else
+            HEADER="📤 *Push*"
+            SUBHEADER="ветка \`${REF}\` | коммит \`${SHORT_SHA}\`"
+          fi
+
+          REPORT=""
+          REPORT+="${HEADER}\n"
+          REPORT+="Репозиторий: \`${REPO}\`\n"
+          REPORT+="Автор: \`${ACTOR}\`\n"
+          REPORT+="${SUBHEADER}\n"
+          REPORT+="\n─────────────────────\n"
+
+          HAS_BACKEND="${{ steps.changed.outputs.has_backend }}"
+          HAS_FLUTTER="${{ steps.changed.outputs.has_flutter }}"
+          HAS_STREAMING="${{ steps.changed.outputs.has_streaming }}"
+
+          CRITICAL=false
+
+          # Backend section
+          if [ "$HAS_BACKEND" = "true" ]; then
+            REPORT+="🖥️ *Backend (NestJS)*\n"
+            NOTES="${{ steps.backend_audit.outputs.notes }}"
+            ISSUES="${{ steps.backend_audit.outputs.issues }}"
+            [ -n "$NOTES" ] && REPORT+="$NOTES"
+            if [ -n "$ISSUES" ]; then
+              REPORT+="$ISSUES"
+              echo "$ISSUES" | grep -q "🚨" && CRITICAL=true
+            fi
+            REPORT+="\n"
+          fi
+
+          # Flutter section
+          if [ "$HAS_FLUTTER" = "true" ]; then
+            REPORT+="📱 *Flutter (Dart)*\n"
+            NOTES="${{ steps.flutter_audit.outputs.notes }}"
+            ISSUES="${{ steps.flutter_audit.outputs.issues }}"
+            [ -n "$NOTES" ] && REPORT+="$NOTES"
+            if [ -n "$ISSUES" ]; then
+              REPORT+="$ISSUES"
+              echo "$ISSUES" | grep -q "🚨" && CRITICAL=true
+            fi
+            REPORT+="\n"
+          fi
+
+          # Streaming section
+          if [ "$HAS_STREAMING" = "true" ]; then
+            REPORT+="🎥 *Видеостриминг (go2rtc/RTSP)*\n"
+            NOTES="${{ steps.streaming_audit.outputs.notes }}"
+            ISSUES="${{ steps.streaming_audit.outputs.issues }}"
+            [ -n "$NOTES" ] && REPORT+="$NOTES"
+            if [ -n "$ISSUES" ]; then
+              REPORT+="$ISSUES"
+              echo "$ISSUES" | grep -q "🚨" && CRITICAL=true
+            fi
+            REPORT+="\n"
+          fi
+
+          # No relevant changes
+          if [ "$HAS_BACKEND" != "true" ] && [ "$HAS_FLUTTER" != "true" ] && [ "$HAS_STREAMING" != "true" ]; then
+            REPORT+="ℹ️ Изменены только конфигурационные / прочие файлы\n\n"
+          fi
+
+          REPORT+="─────────────────────\n"
+          if $CRITICAL; then
+            REPORT+="🚨 *Статус: КРИТИЧЕСКИЕ ПРОБЛЕМЫ — требуется проверка*"
+          else
+            REPORT+="✅ *Статус: критических проблем не обнаружено*"
+          fi
+
+          # Escape special chars for Telegram MarkdownV2
+          # Use JSON to safely pass multiline text
+          echo "message<<EOFMSG" >> $GITHUB_OUTPUT
+          printf "%b" "$REPORT" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "EOFMSG" >> $GITHUB_OUTPUT
+
+          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+
+      - name: Send Telegram notification
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          MESSAGE="${{ steps.report.outputs.message }}"
+
+          # Send via Telegram Bot API using Markdown
+          RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT}" \
+            --data-urlencode "text=${MESSAGE}" \
+            --data-urlencode "parse_mode=Markdown" \
+            -w "\n%{http_code}")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -1)
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Telegram API error: HTTP $HTTP_CODE"
+            echo "Response: $BODY"
+            exit 1
+          fi
+
+          OK=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('ok','false'))" 2>/dev/null || echo "unknown")
+          if [ "$OK" != "True" ]; then
+            echo "❌ Telegram returned ok=false"
+            echo "Response: $BODY"
+            exit 1
+          fi
+
+          echo "✅ Telegram report sent successfully"
