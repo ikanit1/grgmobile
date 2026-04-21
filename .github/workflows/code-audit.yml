@@ -1,0 +1,347 @@
+name: Автоматический Аудит Кода
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: files
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.sha }}"
+            git diff --name-only "$BASE_SHA" "$HEAD_SHA" > /tmp/changed_files.txt
+          else
+            if git rev-parse HEAD~1 >/dev/null 2>&1; then
+              git diff --name-only HEAD~1 HEAD > /tmp/changed_files.txt
+            else
+              git diff-tree --no-commit-id -r --name-only HEAD > /tmp/changed_files.txt
+            fi
+          fi
+          echo "=== Changed files ==="
+          cat /tmp/changed_files.txt
+
+      - name: Analyze changes and build report
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          CHANGED=$(cat /tmp/changed_files.txt)
+          TOTAL=$(echo "$CHANGED" | grep -c "." 2>/dev/null || echo "0")
+
+          # Categorize changed files
+          BACKEND_FILES=$(echo "$CHANGED" | grep "^backend/" || true)
+          FLUTTER_FILES=$(echo "$CHANGED" | grep "^lib/" || true)
+          PUBSPEC_FILES=$(echo "$CHANGED" | grep "^pubspec" || true)
+          MIGRATION_FILES=$(echo "$CHANGED" | grep -iE "(migration|migrat)" || true)
+          ENTITY_FILES=$(echo "$CHANGED" | grep -E "\.(entity|schema)\.(ts|js)$" || true)
+          CONTROLLER_FILES=$(echo "$CHANGED" | grep -E "\.controller\.(ts|js)$" || true)
+          SERVICE_FILES=$(echo "$CHANGED" | grep -E "\.service\.(ts|js)$" || true)
+          MODULE_FILES=$(echo "$CHANGED" | grep -E "\.module\.(ts|js)$" || true)
+          STREAMING_FILES=$(echo "$CHANGED" | grep -iE "(stream|rtsp|go2rtc|video|live-url|live_url)" || true)
+          WIDGET_FILES=$(echo "$CHANGED" | grep -E "^lib/(widgets|screens)/" || true)
+          AUTH_FILES=$(echo "$CHANGED" | grep -iE "(auth|guard|jwt)" || true)
+          CRED_FILES=$(echo "$CHANGED" | grep -iE "(credential|encrypt|secret)" || true)
+          WEBHOOK_FILES=$(echo "$CHANGED" | grep -iE "(webhook|akuvox|uniview)" || true)
+
+          # Build header
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            HEADER="*Аудит Pull Request #${PR_NUMBER}*"
+            CONTEXT="PR: ${PR_TITLE}"
+          else
+            COMMIT_SHORT="${COMMIT_MSG:0:60}"
+            HEADER="*Аудит Push -> ${BRANCH}*"
+            CONTEXT="Коммит: ${COMMIT_SHORT}"
+          fi
+
+          SHA_SHORT="${COMMIT_SHA:0:8}"
+
+          REPORT="${HEADER}
+
+Репозиторий: ${REPO}
+Автор: ${ACTOR}
+${CONTEXT}
+SHA: ${SHA_SHORT}
+
+Изменено файлов: ${TOTAL}
+"
+
+          CRITICAL_FLAGS=""
+          WARN_FLAGS=""
+
+          # ─── Backend (NestJS) ───────────────────────────────────────
+          if [ -n "$BACKEND_FILES" ]; then
+            BACKEND_COUNT=$(echo "$BACKEND_FILES" | grep -c "." || echo "0")
+            REPORT="${REPORT}
+[Backend NestJS — ${BACKEND_COUNT} файл(ов)]"
+
+            # Migrations
+            if [ -n "$MIGRATION_FILES" ]; then
+              REPORT="${REPORT}
+  МИГРАЦИИ PostgreSQL:"
+              while IFS= read -r f; do
+                [ -n "$f" ] && REPORT="${REPORT}
+    • ${f}"
+              done <<< "$MIGRATION_FILES"
+              REPORT="${REPORT}
+  !! Проверьте: порядок выполнения, метод down(), индексы и FK"
+              WARN_FLAGS="${WARN_FLAGS}migration "
+            fi
+
+            # Entities / schemas
+            if [ -n "$ENTITY_FILES" ]; then
+              REPORT="${REPORT}
+  Сущности / схемы:"
+              while IFS= read -r f; do
+                [ -n "$f" ] && REPORT="${REPORT}
+    • ${f}"
+              done <<< "$ENTITY_FILES"
+
+              # Check for nullable:false without migration
+              if [ -n "$ENTITY_FILES" ] && [ -z "$MIGRATION_FILES" ]; then
+                for f in $ENTITY_FILES; do
+                  if [ -f "$f" ] && grep -q "nullable: false" "$f" 2>/dev/null; then
+                    REPORT="${REPORT}
+  !! ВНИМАНИЕ: nullable:false без миграции — возможен сбой синхронизации"
+                    WARN_FLAGS="${WARN_FLAGS}nullable "
+                    break
+                  fi
+                done
+              fi
+            fi
+
+            # Controllers — check for missing auth guards
+            if [ -n "$CONTROLLER_FILES" ]; then
+              REPORT="${REPORT}
+  Контроллеры:"
+              while IFS= read -r f; do
+                [ -n "$f" ] && REPORT="${REPORT}
+    • ${f}"
+              done <<< "$CONTROLLER_FILES"
+
+              for f in $CONTROLLER_FILES; do
+                if [ -f "$f" ]; then
+                  if ! grep -qE "JwtAuthGuard|@UseGuards|@Public|AuthGuard" "$f" 2>/dev/null; then
+                    REPORT="${REPORT}
+  !! КРИТИЧНО: ${f} — нет JwtAuthGuard! Возможна утечка данных."
+                    CRITICAL_FLAGS="${CRITICAL_FLAGS}no_guard "
+                  fi
+                  # Check for direct SQL / injection risk
+                  if grep -qE "query\s*\(\s*['\"\`].*\$\{" "$f" 2>/dev/null; then
+                    REPORT="${REPORT}
+  !! КРИТИЧНО: ${f} — подозрение на SQL-инъекцию (шаблонные строки в query)"
+                    CRITICAL_FLAGS="${CRITICAL_FLAGS}sql_injection "
+                  fi
+                fi
+              done
+            fi
+
+            # Services
+            if [ -n "$SERVICE_FILES" ]; then
+              REPORT="${REPORT}
+  Сервисы:"
+              while IFS= read -r f; do
+                [ -n "$f" ] && REPORT="${REPORT}
+    • ${f}"
+              done <<< "$SERVICE_FILES"
+            fi
+
+            # Modules
+            if [ -n "$MODULE_FILES" ]; then
+              REPORT="${REPORT}
+  Модули (imports):"
+              while IFS= read -r f; do
+                [ -n "$f" ] && REPORT="${REPORT}
+    • ${f}"
+              done <<< "$MODULE_FILES"
+            fi
+
+            # Auth / credentials changes
+            if [ -n "$AUTH_FILES" ]; then
+              REPORT="${REPORT}
+  !! Auth/JWT изменения — требуется ревью безопасности"
+              WARN_FLAGS="${WARN_FLAGS}auth "
+            fi
+            if [ -n "$CRED_FILES" ]; then
+              REPORT="${REPORT}
+  !! Изменены файлы шифрования учётных данных — проверьте AES-256-GCM"
+              WARN_FLAGS="${WARN_FLAGS}creds "
+            fi
+
+            # Webhooks / vendor
+            if [ -n "$WEBHOOK_FILES" ]; then
+              REPORT="${REPORT}
+  Вендор-интеграции (Akuvox/Uniview/Webhooks):"
+              while IFS= read -r f; do
+                [ -n "$f" ] && REPORT="${REPORT}
+    • ${f}"
+              done <<< "$WEBHOOK_FILES"
+            fi
+          fi
+
+          # ─── Streaming / go2rtc ─────────────────────────────────────
+          if [ -n "$STREAMING_FILES" ]; then
+            REPORT="${REPORT}
+
+[Стриминг / go2rtc / видео]"
+            while IFS= read -r f; do
+              [ -n "$f" ] && REPORT="${REPORT}
+  • ${f}"
+            done <<< "$STREAMING_FILES"
+
+            STREAM_ERR_MISSING=""
+            for f in $STREAMING_FILES; do
+              if [ -f "$f" ] && echo "$f" | grep -qE "\.(ts|js|dart)$"; then
+                if ! grep -qE "try|catch|HttpException|throw|onError|catchError" "$f" 2>/dev/null; then
+                  STREAM_ERR_MISSING="${STREAM_ERR_MISSING}${f} "
+                fi
+              fi
+            done
+
+            if [ -n "$STREAM_ERR_MISSING" ]; then
+              REPORT="${REPORT}
+  !! Нет обработки ошибок в:"
+              for f in $STREAM_ERR_MISSING; do
+                REPORT="${REPORT}
+    • ${f}"
+              done
+              REPORT="${REPORT}
+  Добавьте try/catch и HttpException для корректного ответа клиенту."
+              WARN_FLAGS="${WARN_FLAGS}stream_err "
+            else
+              REPORT="${REPORT}
+  OK: Обработка ошибок присутствует"
+            fi
+          fi
+
+          # ─── Flutter ────────────────────────────────────────────────
+          if [ -n "$FLUTTER_FILES" ] || [ -n "$PUBSPEC_FILES" ]; then
+            FLUTTER_COUNT=$(( $(echo "$FLUTTER_FILES" | grep -c "." 2>/dev/null || echo 0) + $(echo "$PUBSPEC_FILES" | grep -c "." 2>/dev/null || echo 0) ))
+            REPORT="${REPORT}
+
+[Flutter — ${FLUTTER_COUNT} файл(ов)]"
+
+            if [ -n "$PUBSPEC_FILES" ]; then
+              REPORT="${REPORT}
+  !! pubspec.yaml изменён — запустите 'flutter pub get', проверьте зависимости"
+              WARN_FLAGS="${WARN_FLAGS}pubspec "
+            fi
+
+            if [ -n "$WIDGET_FILES" ]; then
+              REPORT="${REPORT}
+  UI-компоненты (screens/widgets):"
+              while IFS= read -r f; do
+                [ -n "$f" ] && REPORT="${REPORT}
+    • ${f}"
+              done <<< "$WIDGET_FILES"
+            fi
+
+            # Check dart files for force-unwrap (!!) anti-pattern
+            FORCE_UNWRAP=""
+            for f in $FLUTTER_FILES; do
+              if [ -f "$f" ] && echo "$f" | grep -q "\.dart$"; then
+                COUNT=$(grep -c '![^=]' "$f" 2>/dev/null || echo "0")
+                if [ "$COUNT" -gt "5" ]; then
+                  FORCE_UNWRAP="${FORCE_UNWRAP}${f}(${COUNT}x) "
+                fi
+              fi
+            done
+            if [ -n "$FORCE_UNWRAP" ]; then
+              REPORT="${REPORT}
+  !! Много принудительных unwrap (!): ${FORCE_UNWRAP}— риск null-crash"
+              WARN_FLAGS="${WARN_FLAGS}null_crash "
+            fi
+
+            # Check for BackendClient usage consistency
+            BC_FILES=$(echo "$FLUTTER_FILES" | grep -v "backend_client" || true)
+            for f in $BC_FILES; do
+              if [ -f "$f" ] && grep -q "http\." "$f" 2>/dev/null && ! grep -q "BackendClient\|backend_client" "$f" 2>/dev/null; then
+                REPORT="${REPORT}
+  !! ${f}: прямой http-вызов без BackendClient — нарушение архитектуры"
+                WARN_FLAGS="${WARN_FLAGS}direct_http "
+                break
+              fi
+            done
+          fi
+
+          # ─── Итоговый вердикт ────────────────────────────────────────
+          REPORT="${REPORT}
+
+════════════════════
+ИТОГ:"
+
+          if [ -n "$CRITICAL_FLAGS" ]; then
+            REPORT="${REPORT}
+КРИТИЧЕСКИЕ ПРОБЛЕМЫ — срочно исправить!"
+            for flag in $CRITICAL_FLAGS; do
+              case $flag in
+                no_guard)    REPORT="${REPORT}
+  • Контроллер без аутентификации" ;;
+                sql_injection) REPORT="${REPORT}
+  • Риск SQL-инъекции" ;;
+              esac
+            done
+          fi
+
+          WARN_COUNT=$(echo "$WARN_FLAGS" | wc -w)
+          if [ "$WARN_COUNT" -gt "0" ]; then
+            REPORT="${REPORT}
+Предупреждений: ${WARN_COUNT} — рекомендуется проверить"
+          fi
+
+          if [ -z "$CRITICAL_FLAGS" ] && [ -z "$WARN_FLAGS" ]; then
+            REPORT="${REPORT}
+OK: Критических проблем не обнаружено. Изменения соответствуют архитектуре."
+          fi
+
+          REPORT="${REPORT}
+
+Аудит: GRG Mobile CI | $(date -u '+%Y-%m-%d %H:%M UTC')"
+
+          # Save report to file
+          printf '%s' "$REPORT" > /tmp/audit_report.txt
+          echo "=== AUDIT REPORT ==="
+          cat /tmp/audit_report.txt
+
+      - name: Send report to Telegram
+        run: |
+          REPORT=$(cat /tmp/audit_report.txt)
+
+          HTTP_CODE=$(curl -s -o /tmp/tg_response.txt -w "%{http_code}" \
+            -X POST "https://api.telegram.org/bot${{ env.TELEGRAM_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ env.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=${REPORT}" \
+            --data-urlencode "disable_web_page_preview=true")
+
+          echo "HTTP status: $HTTP_CODE"
+          echo "Response: $(cat /tmp/tg_response.txt)"
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "Report sent to Telegram successfully."
+          else
+            echo "Telegram API error (HTTP $HTTP_CODE) — check token/chat_id."
+          fi
+        env:
+          TELEGRAM_TOKEN: "8578442151:AAGyycIa1TyBCrMp78QLNS2GCscB8Kph6Rc"
+          TELEGRAM_CHAT_ID: "947126451"
