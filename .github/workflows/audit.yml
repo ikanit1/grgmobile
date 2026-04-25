@@ -1,0 +1,270 @@
+# ============================================================
+# GRG Mobile — Automated Code Audit & Telegram Reporter
+# ============================================================
+# Triggers on every push and pull_request.
+# Audits: NestJS backend migrations/schemas, Flutter UI
+#         components, go2rtc/RTSP streaming error handling,
+#         and sensitive file changes.
+#
+# REQUIRED GitHub Secrets (Settings → Secrets → Actions):
+#   TELEGRAM_TOKEN   — Telegram bot token
+#   TELEGRAM_CHAT_ID — Telegram chat/user ID (947126451)
+# ============================================================
+
+name: "Code Audit → Telegram"
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  audit:
+    name: Audit & Report
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # ── 1. Checkout ─────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── 2. Resolve changed files ────────────────────────────
+      - name: Resolve changed files
+        id: files
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ] || [ -z "$BASE" ]; then
+            CHANGED=$(git show --name-only --format="" "$HEAD" 2>/dev/null | grep -v '^$' || echo "")
+          else
+            CHANGED=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || echo "")
+          fi
+
+          echo "changed_files<<DELIMITER" >> "$GITHUB_OUTPUT"
+          echo "$CHANGED"               >> "$GITHUB_OUTPUT"
+          echo "DELIMITER"              >> "$GITHUB_OUTPUT"
+
+          echo "=== Changed files ==="
+          echo "$CHANGED"
+
+      # ── 3. Audit ─────────────────────────────────────────────
+      - name: Run audit
+        id: audit
+        env:
+          CHANGED:           ${{ steps.files.outputs.changed_files }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF_NAME:   ${{ github.ref_name }}
+          GITHUB_ACTOR:      ${{ github.actor }}
+          GITHUB_SHA:        ${{ github.sha }}
+          GITHUB_RUN_ID:     ${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_TITLE:          ${{ github.event.pull_request.title }}
+        run: |
+          python3 - << 'PYEOF'
+          import os, re
+
+          changed   = [f.strip() for f in os.environ.get("CHANGED","").splitlines() if f.strip()]
+          event     = os.environ.get("GITHUB_EVENT_NAME", "push")
+          repo      = os.environ.get("GITHUB_REPOSITORY", "")
+          ref       = os.environ.get("GITHUB_REF_NAME", "")
+          actor     = os.environ.get("GITHUB_ACTOR", "")
+          sha       = os.environ.get("GITHUB_SHA", "")[:8]
+          run_id    = os.environ.get("GITHUB_RUN_ID", "")
+          pr_title  = os.environ.get("PR_TITLE", "")
+          run_url   = f"https://github.com/{repo}/actions/runs/{run_id}"
+
+          sections, critical, warnings = [], [], []
+
+          # ── Backend (NestJS / PostgreSQL) ─────────────────────
+          backend = [f for f in changed if f.startswith("backend/")]
+          if backend:
+              entities    = [f for f in backend if ".entity.ts"    in f]
+              migrations  = [f for f in backend if "migration"     in f.lower()]
+              dtos        = [f for f in backend if ".dto.ts"       in f]
+              modules     = [f for f in backend if ".module.ts"    in f]
+              services    = [f for f in backend if ".service.ts"   in f]
+              controllers = [f for f in backend if ".controller.ts" in f]
+              cred_files  = [f for f in backend if any(k in f.lower() for k in ["credential","encrypt"])]
+
+              block = ["*\U0001f4e6 Backend (NestJS):*", f"  Файлов: {len(backend)}"]
+              if entities:
+                  block.append(f"  \U0001f5c4️ Entity ({len(entities)}):")
+                  for e in entities[:4]:
+                      block.append(f"    • `{e.split('/')[-1]}`")
+                  if not migrations:
+                      critical.append(
+                          "❌ Entity изменены без миграций: "
+                          + ", ".join(e.split("/")[-1] for e in entities)
+                      )
+              if migrations:
+                  block.append(f"  \U0001f504 Миграции ({len(migrations)}): ✅")
+              if dtos:
+                  block.append(f"  \U0001f4cb DTO/Schema: {len(dtos)}")
+              if modules:
+                  block.append("  \U0001f4e6 Модули: " + ", ".join(m.split("/")[-1] for m in modules[:3]))
+              if controllers:
+                  block.append(f"  \U0001f310 Контроллеры: {len(controllers)}")
+              if services:
+                  block.append(f"  ⚙️ Сервисы: {len(services)}")
+              if cred_files:
+                  warnings.append("⚠️ Затронуты credential/encryption файлы: "
+                                  + ", ".join(c.split("/")[-1] for c in cred_files))
+              sections.append("\n".join(block))
+
+          # ── Flutter / Dart ────────────────────────────────────
+          flutter = [f for f in changed if f.startswith("lib/") or f in ("pubspec.yaml","pubspec.lock")]
+          if flutter:
+              screens  = [f for f in flutter if any(k in f for k in ("/screen","/page","_screen","_page"))]
+              widgets  = [f for f in flutter if "/widget" in f or "_widget" in f]
+              services = [f for f in flutter if "/service" in f or "_service" in f]
+              models   = [f for f in flutter if "/model" in f or "_model" in f]
+              api_f    = [f for f in flutter if "/api/" in f or "_client" in f]
+              deps     = [f for f in flutter if "pubspec" in f]
+
+              block = ["*\U0001f4f1 Flutter (Dart):*", f"  Файлов: {len(flutter)}"]
+              if screens:
+                  block.append(f"  \U0001f5a5️ Экраны ({len(screens)}):")
+                  for s in screens[:4]:
+                      block.append(f"    • `{s.split('/')[-1]}`")
+              if widgets:
+                  block.append(f"  \U0001f9e9 Виджеты: {len(widgets)}")
+              if services:
+                  block.append(f"  ⚙️ Сервисы: {len(services)}")
+              if models:
+                  block.append(f"  \U0001f4ca Модели: {len(models)}")
+              if api_f:
+                  block.append(f"  \U0001f310 API клиенты: {len(api_f)}")
+              if deps:
+                  warnings.append("⚠️ Изменены Flutter зависимости — запусти `flutter pub get`")
+                  block.append("  \U0001f4e6 pubspec изменён")
+              sections.append("\n".join(block))
+
+          # ── Streaming / go2rtc / RTSP ─────────────────────────
+          STREAM_KW = ["go2rtc","rtc","stream","video","live","rtsp","camera","snapshot"]
+          streaming = [f for f in changed if any(k in f.lower() for k in STREAM_KW)]
+          if streaming:
+              block = ["*\U0001f3a5 Видеостриминг (go2rtc/RTSP):*", f"  Файлов: {len(streaming)}"]
+              for sf in streaming[:5]:
+                  block.append(f"  • `{sf.split('/')[-1]}`")
+
+              no_err = []
+              for fpath in streaming:
+                  if os.path.isfile(fpath) and fpath.endswith((".ts",".dart",".js",".tsx")):
+                      content = open(fpath, encoding="utf-8", errors="ignore").read()
+                      if not (re.search(r'\btry\b', content) and re.search(r'\bcatch\b', content)):
+                          no_err.append(fpath.split("/")[-1])
+              if no_err:
+                  critical.append("❌ Нет try/catch в стриминг-файлах: " + ", ".join(no_err))
+              else:
+                  block.append("  ✅ Обработка ошибок присутствует")
+              sections.append("\n".join(block))
+
+          # ── Sensitive files ───────────────────────────────────
+          SENS = [".env","secret","credential","password","token","private_key",".pem",".key"]
+          sensitive = [f for f in changed if any(k in f.lower() for k in SENS)]
+          if sensitive:
+              critical.append("\U0001f510 Чувствительные файлы: "
+                              + ", ".join(s.split("/")[-1] for s in sensitive))
+
+          # ── CI / DevOps ───────────────────────────────────────
+          ci = [f for f in changed if f.startswith(".github/") or "docker" in f.lower()]
+          if ci:
+              warnings.append("⚠️ CI/DevOps файлы: " + ", ".join(c.split("/")[-1] for c in ci[:3]))
+
+          # ── Compose report ────────────────────────────────────
+          ev_emoji = "\U0001f500" if event == "pull_request" else "\U0001f4e4"
+          status   = "\U0001f6a8 ЕСТЬ ПРОБЛЕМЫ" if critical else "✅ OK"
+
+          hlines = [
+              f"{ev_emoji} *Аудит: {repo.split('/')[-1]}*",
+              f"`{repo}`",
+              "─" * 26,
+              f"\U0001f4cc Событие: `{event}`",
+              f"\U0001f33f Ветка: `{ref}`",
+              f"\U0001f464 Автор: `{actor}`",
+              f"\U0001f516 Коммит: `{sha}`",
+          ]
+          if pr_title:
+              hlines.append(f"\U0001f4dd PR: _{pr_title}_")
+          hlines += [f"\U0001f4ca Файлов: `{len(changed)}`", f"\U0001f530 Статус: *{status}*"]
+          header = "\n".join(hlines)
+
+          body   = "\n\n".join(sections) if sections else "_Изменений в коде проекта не обнаружено_"
+
+          issues = ""
+          if critical:
+              issues += "\n\n*\U0001f6a8 КРИТИЧЕСКИЕ ПРОБЛЕМЫ:*\n" + "\n".join(f"  {c}" for c in critical)
+          if warnings:
+              issues += "\n\n*⚠️ ПРЕДУПРЕЖДЕНИЯ:*\n" + "\n".join(f"  {w}" for w in warnings)
+          if not critical and not warnings:
+              issues = "\n\n_✅ Критических проблем не обнаружено_"
+
+          full = f"{header}\n\n{body}{issues}\n\n\U0001f517 [GitHub Actions]({run_url})"
+          if len(full) > 4000:
+              full = full[:3950] + "\n\n_...сообщение обрезано_"
+
+          out = os.environ.get("GITHUB_OUTPUT","")
+          if out:
+              with open(out,"a") as fh:
+                  fh.write(f"report<<DELIM\n{full}\nDELIM\n")
+                  fh.write(f"has_critical={'true' if critical else 'false'}\n")
+
+          print("=== AUDIT REPORT ===")
+          print(full)
+          PYEOF
+
+      # ── 4. Send Telegram ─────────────────────────────────────
+      - name: Send Telegram report
+        env:
+          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          REPORT:           ${{ steps.audit.outputs.report }}
+        run: |
+          if [ -z "$TELEGRAM_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "::warning::Telegram secrets not configured."
+            echo "  Add TELEGRAM_TOKEN and TELEGRAM_CHAT_ID in:"
+            echo "  GitHub → Settings → Secrets and variables → Actions"
+            exit 0
+          fi
+
+          PAYLOAD=$(python3 - << 'PYEOF'
+          import os, json
+          print(json.dumps({
+            "chat_id":                  os.environ["TELEGRAM_CHAT_ID"],
+            "text":                     os.environ["REPORT"],
+            "parse_mode":               "Markdown",
+            "disable_web_page_preview": True
+          }))
+          PYEOF
+          )
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Telegram API error (HTTP $HTTP_CODE): $BODY"
+            exit 1
+          fi
+          echo "Telegram notification sent successfully (HTTP $HTTP_CODE)"
+
+      # ── 5. Fail if critical issues ───────────────────────────
+      - name: Fail on critical issues
+        if: steps.audit.outputs.has_critical == 'true'
+        run: |
+          echo "::error::Critical issues detected in the audit. See report above."
+          exit 1
