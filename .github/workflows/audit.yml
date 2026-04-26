@@ -1,0 +1,83 @@
+name: Repository Audit & Telegram Report
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Get changed files
+        id: changed_files
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+
+          # Handle first commit (no before SHA)
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ] || [ -z "$BASE" ]; then
+            CHANGED=$(git diff-tree --no-commit-id -r --name-only "$HEAD" 2>/dev/null || git ls-files)
+          else
+            CHANGED=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || git ls-files)
+          fi
+
+          echo "$CHANGED" > /tmp/changed_files.txt
+          echo "changed_files<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "base_sha=$BASE" >> $GITHUB_OUTPUT
+          echo "head_sha=$HEAD" >> $GITHUB_OUTPUT
+
+      - name: Get commit info
+        id: commit_info
+        run: |
+          AUTHOR="${{ github.actor }}"
+          BRANCH="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            MSG="${{ github.event.pull_request.title }}"
+            PR_NUM="${{ github.event.number }}"
+            echo "event_desc=PR #${PR_NUM}: ${MSG}" >> $GITHUB_OUTPUT
+          else
+            MSG=$(git log -1 --pretty=%s "${{ github.sha }}" 2>/dev/null || echo "No message")
+            echo "event_desc=Push: ${MSG}" >> $GITHUB_OUTPUT
+          fi
+          echo "author=$AUTHOR" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "sha=$(echo '${{ github.sha }}' | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Run audit script
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CHANGED_FILES_PATH: /tmp/changed_files.txt
+          EVENT_DESC: ${{ steps.commit_info.outputs.event_desc }}
+          AUTHOR: ${{ steps.commit_info.outputs.author }}
+          BRANCH: ${{ steps.commit_info.outputs.branch }}
+          SHA: ${{ steps.commit_info.outputs.sha }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python .github/scripts/audit.py
