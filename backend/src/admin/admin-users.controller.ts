@@ -1,4 +1,7 @@
-import { BadRequestException, Body, Controller, Delete, ForbiddenException, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { UserApartment } from '../users/entities/user-apartment.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RequestUser } from '../auth/request-user.interface';
 import { UserRole } from '../users/entities/user.entity';
@@ -20,7 +23,96 @@ export class AdminUsersController {
     private readonly organizationsService: OrganizationsService,
     private readonly residentialComplexesService: ResidentialComplexesService,
     private readonly eventLogService: EventLogService,
+    @InjectRepository(UserApartment)
+    private readonly userApartmentsRepo: Repository<UserApartment>,
   ) {}
+
+  @Get('search')
+  async searchUsers(
+    @Query('q') q: string | undefined,
+    @Req() req: { user: RequestUser },
+  ) {
+    const allowedRoles = [UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN, UserRole.COMPLEX_MANAGER];
+    if (!allowedRoles.includes(req.user.role)) {
+      throw new ForbiddenException('Только персонал может искать пользователей');
+    }
+    const all = await this.usersService.findAllForAdmin(req.user);
+    if (!q) return all;
+    const lower = q.toLowerCase();
+    return all.filter((u: any) =>
+      (u.email && u.email.toLowerCase().includes(lower)) ||
+      (u.phone && u.phone.toLowerCase().includes(lower)) ||
+      (u.name && u.name.toLowerCase().includes(lower))
+    );
+  }
+
+  @Get(':id/apartments')
+  async getUserApartments(
+    @Param('id') userId: string,
+    @Req() req: { user: RequestUser },
+  ) {
+    const allowedRoles = [UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN, UserRole.COMPLEX_MANAGER];
+    if (!allowedRoles.includes(req.user.role)) {
+      throw new ForbiddenException('Только персонал может просматривать квартиры пользователя');
+    }
+    const rows = await this.userApartmentsRepo.find({
+      where: { userId },
+      relations: ['apartment', 'apartment.building'],
+    });
+    return rows.map((ua) => ({
+      apartmentId: ua.apartmentId,
+      number: ua.apartment.number,
+      floor: ua.apartment.floor,
+      buildingId: ua.apartment.buildingId,
+      buildingAddress: ua.apartment.building?.address ?? null,
+      role: ua.role,
+      accessLevel: ua.accessLevel,
+      validUntil: ua.validUntil ?? null,
+    }));
+  }
+
+  @Delete(':id/apartments/:apartmentId')
+  async unlinkApartment(
+    @Param('id') userId: string,
+    @Param('apartmentId') apartmentId: string,
+    @Req() req: { user: RequestUser },
+  ) {
+    const allowedRoles = [UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN, UserRole.COMPLEX_MANAGER];
+    if (!allowedRoles.includes(req.user.role)) {
+      throw new ForbiddenException('Только персонал может отвязывать квартиры');
+    }
+    await this.userApartmentsRepo.delete({ userId, apartmentId: Number(apartmentId) });
+    return { ok: true };
+  }
+
+  @Post(':id/apartments')
+  async linkApartment(
+    @Param('id') userId: string,
+    @Body() body: { apartmentId: number; role?: string },
+    @Req() req: { user: RequestUser },
+  ) {
+    const allowedRoles = [UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN, UserRole.COMPLEX_MANAGER];
+    if (!allowedRoles.includes(req.user.role)) {
+      throw new ForbiddenException('Только персонал может привязывать квартиры');
+    }
+    if (!body.apartmentId) {
+      throw new BadRequestException('Укажите apartmentId');
+    }
+    const existing = await this.userApartmentsRepo.findOne({
+      where: { userId, apartmentId: body.apartmentId },
+    });
+    if (existing) {
+      throw new BadRequestException('Квартира уже привязана к этому пользователю');
+    }
+    const ua = this.userApartmentsRepo.create({
+      userId,
+      apartmentId: body.apartmentId,
+      role: body.role ?? 'resident',
+      accessLevel: 1,
+    });
+    await this.userApartmentsRepo.save(ua);
+    return { ok: true };
+  }
 
   @Patch(':id/block')
   async setBlocked(

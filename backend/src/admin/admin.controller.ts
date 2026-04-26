@@ -20,6 +20,19 @@ export class AdminController {
       return res.type('text/html').status(404).send('<h1>admin.html not found</h1><p>Create backend/public/admin.html</p>');
     }
     const html = readFileSync(path, 'utf-8');
+    res.setHeader(
+      'Content-Security-Policy',
+      [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "connect-src 'self' ws: wss:",
+        "img-src 'self' data: blob:",
+        "font-src 'self'",
+        "frame-src 'none'",
+        "object-src 'none'",
+      ].join('; '),
+    );
     res.type('text/html').send(html);
   }
 

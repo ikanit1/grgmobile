@@ -90,6 +90,48 @@ export class EventLogService {
     }).length;
   }
 
+  /** Filtered events for all accessible devices (admin journal with pagination). */
+  async findFiltered(
+    deviceIds: number[],
+    options?: {
+      deviceId?: number;
+      eventType?: string;
+      from?: string;
+      to?: string;
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<{ items: EventLog[]; total: number }> {
+    if (deviceIds.length === 0) return { items: [], total: 0 };
+
+    const qb = this.eventLogRepo
+      .createQueryBuilder('e')
+      .where('e.deviceId IN (:...ids)', { ids: deviceIds })
+      .orderBy('e.createdAt', 'DESC');
+
+    if (options?.deviceId) {
+      qb.andWhere('e.deviceId = :deviceId', { deviceId: options.deviceId });
+    }
+    if (options?.eventType) {
+      qb.andWhere('e.eventType = :eventType', { eventType: options.eventType });
+    }
+    if (options?.from) {
+      qb.andWhere('e.createdAt >= :from', { from: options.from });
+    }
+    if (options?.to) {
+      qb.andWhere('e.createdAt <= :to', { to: options.to });
+    }
+
+    const total = await qb.getCount();
+
+    const limit = Math.min(options?.limit ?? 50, 100);
+    const offset = options?.offset ?? 0;
+    qb.take(limit).skip(offset);
+
+    const items = await qb.getMany();
+    return { items, total };
+  }
+
   /** Find audit events for a specific organisation (for monitoring / NOC dashboard). */
   async findByOrganization(
     organizationId: string,

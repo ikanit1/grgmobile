@@ -19,6 +19,7 @@ import { Building } from '../buildings/entities/building.entity';
 import { Device } from '../devices/entities/device.entity';
 import { UserApartment } from '../users/entities/user-apartment.entity';
 import { ApartmentApplication } from '../apartments/entities/apartment-application.entity';
+import { Apartment } from '../apartments/entities/apartment.entity';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ApartmentApplication } from '../apartments/entities/apartment-applicati
       Device,
       UserApartment,
       ApartmentApplication,
+      Apartment,
     ]),
     AuthModule,
     UsersModule,
