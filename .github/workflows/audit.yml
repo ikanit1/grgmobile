@@ -1,0 +1,306 @@
+name: Auto Code Audit & Telegram Report
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine changed files
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+            CHANGED=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || git diff-tree --no-commit-id -r --name-only HEAD)
+          else
+            BEFORE="${{ github.event.before }}"
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              CHANGED=$(git diff-tree --no-commit-id -r --name-only HEAD)
+            else
+              CHANGED=$(git diff --name-only "$BEFORE" "${{ github.sha }}" 2>/dev/null || git diff-tree --no-commit-id -r --name-only HEAD)
+            fi
+          fi
+
+          echo "$CHANGED" > /tmp/changed_files.txt
+          echo "backend_changed=$(echo "$CHANGED" | grep -q '^backend/' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "flutter_changed=$(echo "$CHANGED" | grep -qE '^lib/|^pubspec' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "go2rtc_changed=$(echo "$CHANGED" | grep -qiE 'go2rtc|stream|rtsp|webrtc|hls' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "Changed files:"
+          cat /tmp/changed_files.txt
+
+      - name: Setup Node.js
+        if: steps.changes.outputs.backend_changed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Backend - install & TypeScript check
+        if: steps.changes.outputs.backend_changed == 'true'
+        id: backend_ts
+        working-directory: backend
+        run: |
+          npm ci --prefer-offline 2>&1 | tail -3
+          npx tsc --noEmit 2>&1 > /tmp/ts_errors.txt || true
+          TS_COUNT=$(grep -c "error TS" /tmp/ts_errors.txt || true)
+          echo "ts_error_count=$TS_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Backend - audit migrations, entities, controllers
+        if: steps.changes.outputs.backend_changed == 'true'
+        run: |
+          CHANGED=$(cat /tmp/changed_files.txt)
+          {
+            echo "=== BACKEND AUDIT ==="
+            MIGRATION_FILES=$(echo "$CHANGED" | grep -E '(migration|\.sql)' || true)
+            ENTITY_FILES=$(echo "$CHANGED" | grep -E 'entity\.ts$' || true)
+            CONTROLLER_FILES=$(echo "$CHANGED" | grep -E '(controller|resolver)\.ts$' || true)
+            MODULE_FILES=$(echo "$CHANGED" | grep -E '\.module\.ts$' || true)
+
+            if [ -n "$MIGRATION_FILES" ]; then
+              echo "Миграции/SQL изменены:"
+              echo "$MIGRATION_FILES" | sed 's/^/  /'
+              for f in $MIGRATION_FILES; do
+                [ -f "$f" ] || continue
+                grep -qi "DROP TABLE\|TRUNCATE\|DROP COLUMN" "$f" && echo "  ⚠️  Деструктивная операция в $f"
+                if grep -qi "NOT NULL" "$f" && ! grep -qi "DEFAULT\|ALTER TABLE.*ADD" "$f"; then
+                  echo "  ⚠️  NOT NULL без DEFAULT в $f — риск на существующих данных"
+                fi
+              done
+            else
+              echo "Миграции: не изменялись"
+            fi
+
+            if [ -n "$ENTITY_FILES" ]; then
+              echo "Entities изменены:"
+              echo "$ENTITY_FILES" | sed 's/^/  /'
+              for f in $ENTITY_FILES; do
+                [ -f "$f" ] || continue
+                COUNT=$(grep -c "@Column" "$f" 2>/dev/null || true)
+                [ "$COUNT" -gt 0 ] && echo "  ℹ️  $f — $COUNT @Column определений, проверьте nullable/default"
+              done
+            fi
+
+            if [ -n "$MODULE_FILES" ]; then
+              echo "Модули изменены:"
+              echo "$MODULE_FILES" | sed 's/^/  /'
+            fi
+
+            if [ -n "$CONTROLLER_FILES" ]; then
+              echo "Контроллеры изменены:"
+              echo "$CONTROLLER_FILES" | sed 's/^/  /'
+              for f in $CONTROLLER_FILES; do
+                [ -f "$f" ] || continue
+                if ! grep -q "@UseGuards\|JwtAuthGuard\|RolesGuard" "$f"; then
+                  echo "  ⚠️  $f — guard отсутствует, проверьте аутентификацию"
+                fi
+                if ! grep -qE "findAllForUser|findByIdForUser|accessService|AccessService" "$f"; then
+                  echo "  ℹ️  $f — не обнаружен AccessService, проверьте RBAC"
+                fi
+              done
+            fi
+          } > /tmp/backend_audit.txt
+          cat /tmp/backend_audit.txt
+
+      - name: Flutter - audit UI components & pubspec
+        if: steps.changes.outputs.flutter_changed == 'true'
+        run: |
+          CHANGED=$(cat /tmp/changed_files.txt)
+          {
+            echo "=== FLUTTER AUDIT ==="
+            PUBSPEC=$(echo "$CHANGED" | grep 'pubspec.yaml' || true)
+            DART_FILES=$(echo "$CHANGED" | grep '\.dart$' || true)
+
+            if [ -n "$PUBSPEC" ]; then
+              echo "pubspec.yaml изменён — diff зависимостей:"
+              git diff HEAD~1 HEAD -- pubspec.yaml 2>/dev/null \
+                | grep '^[+-][^+-]' | grep -vE '^[+-]{3}' | head -20 \
+                | sed 's/^/  /' || true
+            fi
+
+            if [ -n "$DART_FILES" ]; then
+              echo "Dart файлы изменены ($(echo "$DART_FILES" | wc -l) шт.):"
+              echo "$DART_FILES" | sed 's/^/  /'
+              for f in $DART_FILES; do
+                [ -f "$f" ] || continue
+                if echo "$f" | grep -qiE "screen|page|view"; then
+                  if ! echo "$f" | grep -qE "^lib/(screens|pages|views)/"; then
+                    echo "  ℹ️  Screen/Page вне lib/screens/: $f"
+                  fi
+                fi
+                HARD=$(grep -cE '"[А-Яа-яЁё]{3,}' "$f" 2>/dev/null || true)
+                [ "$HARD" -gt 5 ] && echo "  ℹ️  $f — $HARD захардкоженных строк (рус.)"
+                if grep -q "BackendClient\|backend_client" "$f" && ! grep -qE "getUser|isLoggedIn|accessToken" "$f"; then
+                  echo "  ℹ️  $f — BackendClient без явной проверки auth"
+                fi
+              done
+            fi
+          } > /tmp/flutter_audit.txt
+          cat /tmp/flutter_audit.txt
+
+      - name: Streaming/go2rtc - audit error handling
+        if: steps.changes.outputs.go2rtc_changed == 'true'
+        run: |
+          CHANGED=$(cat /tmp/changed_files.txt)
+          {
+            echo "=== STREAMING / go2rtc AUDIT ==="
+            STREAM_FILES=$(echo "$CHANGED" | grep -iE 'go2rtc|stream|rtsp|webrtc|hls' || true)
+            for f in $STREAM_FILES; do
+              [ -f "$f" ] || continue
+              echo "Файл: $f"
+              grep -qE 'try\s*\{|\.catch\s*\(|catch\s*\(' "$f" || echo "  ⚠️  Нет обработки ошибок (try/catch)"
+              grep -qiE "timeout|abort|signal" "$f" || echo "  ⚠️  Нет timeout/abort — обязательно для стриминга"
+              if echo "$f" | grep -q "controller"; then
+                grep -q "@UseGuards\|JwtAuthGuard" "$f" || echo "  ⚠️  Стриминг-контроллер без auth guard"
+              fi
+            done
+          } > /tmp/stream_audit.txt
+          cat /tmp/stream_audit.txt
+
+      - name: Send Telegram report
+        if: always()
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BACKEND_CHANGED: ${{ steps.changes.outputs.backend_changed }}
+          FLUTTER_CHANGED: ${{ steps.changes.outputs.flutter_changed }}
+          GO2RTC_CHANGED: ${{ steps.changes.outputs.go2rtc_changed }}
+          TS_ERRORS: ${{ steps.backend_ts.outputs.ts_error_count }}
+        run: |
+          python3 << 'PYEOF'
+          import os, subprocess, urllib.request, json, sys
+
+          token   = os.environ.get("TG_TOKEN", "")
+          chat_id = os.environ.get("TG_CHAT", "")
+          repo    = os.environ.get("GITHUB_REPOSITORY", "unknown/repo")
+          actor   = os.environ.get("GITHUB_ACTOR", "unknown")
+          ref     = os.environ.get("GITHUB_REF_NAME", "unknown")
+          sha     = os.environ.get("GITHUB_SHA", "")[:7]
+          run_id  = os.environ.get("GITHUB_RUN_ID", "")
+          event   = os.environ.get("GITHUB_EVENT_NAME", "push")
+          pr_num  = os.environ.get("PR_NUMBER", "")
+          pr_title = os.environ.get("PR_TITLE", "")
+          ts_err  = os.environ.get("TS_ERRORS", "0") or "0"
+
+          backend = os.environ.get("BACKEND_CHANGED") == "true"
+          flutter = os.environ.get("FLUTTER_CHANGED") == "true"
+          go2rtc  = os.environ.get("GO2RTC_CHANGED") == "true"
+
+          run_url = f"https://github.com/{repo}/actions/runs/{run_id}"
+
+          if event == "pull_request" and pr_num:
+              event_line = f"*PR #{pr_num}*: {pr_title}"
+          else:
+              try:
+                  commit_msg = subprocess.check_output(
+                      ["git", "log", "-1", "--pretty=%s"], text=True
+                  ).strip()[:80]
+              except Exception:
+                  commit_msg = sha
+              event_line = f"*Push* `{sha}`: {commit_msg}"
+
+          # Collect audit sections
+          sections = []
+          def read_file(path):
+              try:
+                  with open(path) as f:
+                      return f.read().strip()
+              except FileNotFoundError:
+                  return ""
+
+          if backend:
+              txt = read_file("/tmp/backend_audit.txt")
+              if txt:
+                  sections.append(txt)
+              if ts_err and ts_err != "0":
+                  sections.append(f"TypeScript ошибок: {ts_err}\n" + read_file("/tmp/ts_errors.txt")[:300])
+
+          if flutter:
+              txt = read_file("/tmp/flutter_audit.txt")
+              if txt:
+                  sections.append(txt)
+
+          if go2rtc:
+              txt = read_file("/tmp/stream_audit.txt")
+              if txt:
+                  sections.append(txt)
+
+          if not sections:
+              sections.append("ℹ️ Изменения не затронули бэкенд, Flutter или стриминг.")
+
+          body = "\n\n".join(sections)
+          has_warnings = "⚠️" in body
+          verdict = "⚠️ *Найдены предупреждения — требуется проверка*" if has_warnings else "✅ *Критических проблем не найдено*"
+
+          scopes = []
+          if backend: scopes.append("Backend")
+          if flutter: scopes.append("Flutter")
+          if go2rtc:  scopes.append("Streaming")
+          scope_line = ", ".join(scopes) if scopes else "—"
+
+          # Truncate body to fit Telegram limit (4096 chars total)
+          body_limit = 2800
+          if len(body) > body_limit:
+              body = body[:body_limit] + "\n... (обрезано)"
+
+          message = (
+              f"🔍 *GRG Mobile — Авто-аудит*\n"
+              f"Репо: `{repo}`\n"
+              f"Событие: {event_line}\n"
+              f"Ветка: `{ref}` · Автор: {actor}\n"
+              f"Затронуто: {scope_line}\n\n"
+              f"{verdict}\n\n"
+              f"```\n{body}\n```\n"
+              f"[Подробности в Actions]({run_url})"
+          )
+
+          if not token or not chat_id:
+              print("❌ TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID secret not set", file=sys.stderr)
+              print("Report that would be sent:")
+              print(message)
+              sys.exit(1)
+
+          url  = f"https://api.telegram.org/bot{token}/sendMessage"
+          data = json.dumps({
+              "chat_id": chat_id,
+              "text": message,
+              "parse_mode": "Markdown",
+              "disable_web_page_preview": True
+          }).encode()
+
+          req = urllib.request.Request(url, data=data,
+                                       headers={"Content-Type": "application/json"})
+          try:
+              with urllib.request.urlopen(req, timeout=15) as resp:
+                  result = json.loads(resp.read())
+                  if result.get("ok"):
+                      print("✅ Telegram report sent successfully")
+                  else:
+                      print(f"❌ Telegram API error: {result}", file=sys.stderr)
+                      sys.exit(1)
+          except Exception as e:
+              print(f"❌ Network error: {e}", file=sys.stderr)
+              sys.exit(1)
+          PYEOF
