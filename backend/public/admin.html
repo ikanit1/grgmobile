@@ -25,7 +25,7 @@
     @keyframes toastIn { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
     .toast.ok   { background:rgba(61,213,152,0.18); border:1px solid rgba(61,213,152,0.35); color:var(--grg-success); }
     .toast.err  { background:rgba(255,107,107,0.18); border:1px solid rgba(255,107,107,0.35); color:var(--grg-danger); }
-    .toast.warn { background:rgba(255,200,100,0.18); border:1px solid rgba(255,200,100,0.35); color:#f0c060; }
+    .toast.warn { background:rgba(246,195,68,0.18); border:1px solid rgba(246,195,68,0.35); color:var(--grg-warning); }
 
     /* ── Modal ── */
     .modal-backdrop {
@@ -451,24 +451,6 @@
           <div id="createMsg" class="msg" style="display:none;"></div>
         </div>
 
-        <div id="nvrChannelsSection" class="card" style="margin-top:1rem; display:none;">
-          <h2 style="margin-top:0;">Быстрое добавление каналов NVR</h2>
-          <p class="meta">Заполните параметры NVR — будут созданы устройства для каждого канала автоматически.</p>
-          <form id="nvrChannelsForm" style="flex-wrap:wrap; margin-top:0.75rem;">
-            <label>Здание <select id="nvrBuildingId"></select></label>
-            <input id="nvrHost" placeholder="IP NVR" required>
-            <input id="nvrUser" placeholder="Логин" value="admin">
-            <input id="nvrPass" type="password" placeholder="Пароль">
-            <input id="nvrHttpPort" type="number" placeholder="HTTP порт" value="80" style="width:110px;">
-            <input id="nvrRtspPort" type="number" placeholder="RTSP порт" value="554" style="width:110px;">
-            <input id="nvrChannelFrom" type="number" placeholder="Канал от" value="1" style="width:90px;">
-            <input id="nvrChannelTo" type="number" placeholder="Канал до" value="4" style="width:90px;">
-            <input id="nvrNamePrefix" placeholder="Префикс имени" value="Камера">
-            <button type="submit">Создать каналы</button>
-          </form>
-          <p class="meta" style="margin-top:0.5rem;">Пример: префикс «Камера», каналы 1-4 → «Камера 1», «Камера 2», «Камера 3», «Камера 4».</p>
-          <div id="nvrChannelsMsg" class="msg" style="display:none;"></div>
-        </div>
 
         <section id="residentSection" class="card" style="margin-top:1rem; display:none;">
           <h2>Жители квартиры</h2>

@@ -8,7 +8,6 @@ import {
 import { Building } from '../../buildings/entities/building.entity';
 
 export enum DeviceType {
-  AKUVOX = 'AKUVOX',
   UNIVIEW_IPC = 'UNIVIEW_IPC',
   UNIVIEW_NVR = 'UNIVIEW_NVR',
   OTHER = 'OTHER',
@@ -68,6 +67,9 @@ export class Device {
   @Column({ nullable: true })
   onvifXAddr?: string;
 
+  @Column({ name: 'mac_address', type: 'varchar', length: 32, nullable: true })
+  macAddress?: string | null;
+
   @Column({ nullable: true })
   defaultChannel?: number;
 
@@ -80,10 +82,6 @@ export class Device {
 
   @Column({ name: 'last_seen_at', nullable: true })
   lastSeenAt?: Date;
-
-  /** MAC address for Akuvox webhook validation (e.g. 0C:11:05:22:BE:A4). */
-  @Column({ name: 'mac_address', type: 'varchar', length: 17, nullable: true })
-  macAddress?: string;
 
   /**
    * Floor restriction for residents. null = visible to ALL residents in the building.
@@ -108,4 +106,8 @@ export class Device {
   /** Last successful config sync (provisioning) timestamp. */
   @Column({ name: 'last_sync_at', nullable: true })
   lastSyncAt?: Date;
+
+  /** FK to parent NVR device. Set for IPC cameras added via NVR channel scan. */
+  @Column({ name: 'nvr_id', type: 'int', nullable: true })
+  nvrId?: number | null;
 }

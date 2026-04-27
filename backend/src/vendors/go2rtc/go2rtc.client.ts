@@ -31,15 +31,16 @@ export class Go2rtcClient {
   async ensureStream(name: string, rtspUrl: string): Promise<void> {
     if (!this.isConfigured || !this.http) return;
     try {
-      // go2rtc v1.9.x API: PUT /api/streams?name={name}&src={url}
-      const params = `name=${encodeURIComponent(name)}&src=${encodeURIComponent(rtspUrl)}`;
+      // Use ffmpeg source to transcode audio (G.711/PCMU → AAC) for HLS compatibility.
+      // Video is copied without re-encoding. Works even when camera has no audio.
+      const src = `ffmpeg:${rtspUrl}#video=copy#audio=aac`;
+      const params = `name=${encodeURIComponent(name)}&src=${encodeURIComponent(src)}`;
       await firstValueFrom(
         this.http.put(`${this.internalUrl}/api/streams?${params}`, null),
       );
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       this.logger.warn(`go2rtc ensureStream "${name}" failed: ${msg}`);
-      // Non-fatal — caller falls back to direct RTSP
     }
   }
 
@@ -59,12 +60,27 @@ export class Go2rtcClient {
   }
 
   /**
-   * Return the public HLS playlist URL for a registered stream.
-   * Flutter uses this URL with media_kit to play HLS over WAN.
+   * Return the public HLS playlist URL for a registered stream (for web/browser use).
    */
   getHlsUrl(name: string): string | null {
     if (!this.publicUrl) return null;
     return `${this.publicUrl}/api/stream.m3u8?src=${encodeURIComponent(name)}`;
+  }
+
+  /**
+   * Return the public RTSP proxy URL for a registered stream.
+   * go2rtc exposes an RTSP server on port 8554 that proxies the stream.
+   * Mobile clients (mpv) use this — RTSP handles startup delay gracefully,
+   * unlike HLS which returns empty m3u8 while FFmpeg is starting.
+   */
+  getRtspProxyUrl(name: string): string | null {
+    if (!this.publicUrl) return null;
+    try {
+      const host = new URL(this.publicUrl).hostname;
+      return `rtsp://${host}:8554/${name}`;
+    } catch {
+      return null;
+    }
   }
 
   /**

@@ -5,7 +5,6 @@ import { OpenDoorDto } from './dto/open-door.dto';
 import { LiveUrlQueryDto } from './dto/live-url.dto';
 import { EventsQueryDto } from './dto/events-query.dto';
 import { TestConnectionDto } from './dto/test-connection.dto';
-import { AkuvoxClient } from '../vendors/akuvox/akuvox.client';
 import { UniviewLiteapiHttpClient } from '../vendors/uniview/uniview-liteapi-http.client';
 import { UniviewWsConnectionService } from '../events/uniview-ws-connection.service';
 import { EventLogService } from '../events/event-log.service';
@@ -25,7 +24,6 @@ export class ControlService {
 
   constructor(
     private readonly devicesService: DevicesService,
-    private readonly akuvoxClient: AkuvoxClient,
     private readonly univiewClient: UniviewLiteapiHttpClient,
     private readonly univiewWs: UniviewWsConnectionService,
     private readonly accessService: AccessService,
@@ -42,9 +40,6 @@ export class ControlService {
 
     let result: { success: boolean; message: string };
     switch (device.type) {
-      case DeviceType.AKUVOX:
-        result = await this.akuvoxClient.openDoor(device, relayId);
-        break;
       case DeviceType.UNIVIEW_IPC:
       case DeviceType.UNIVIEW_NVR:
         result = await this.univiewClient.openDoor(device, relayId);
@@ -67,36 +62,42 @@ export class ControlService {
 
     let result: { protocol: string; url: string };
     switch (device.type) {
-      case DeviceType.AKUVOX:
-        result = await this.akuvoxClient.getLiveUrl(device, query);
-        break;
       case DeviceType.UNIVIEW_IPC:
-      case DeviceType.UNIVIEW_NVR:
-        result = await this.univiewClient.getLiveUrl(device, query);
+      case DeviceType.UNIVIEW_NVR: {
+        // IPC behind an NVR: stream via NVR host/credentials using the camera's channel number
+        if (device.type === DeviceType.UNIVIEW_IPC && device.nvrId) {
+          const nvr = await this.devicesService.findById(device.nvrId);
+          const channelQuery = { ...query, channel: query.channel ?? device.defaultChannel ?? 1 };
+          result = await this.univiewClient.getLiveUrl(nvr, channelQuery);
+        } else {
+          result = await this.univiewClient.getLiveUrl(device, query);
+        }
         break;
+      }
       default:
         throw new BadRequestException('Тип устройства не поддерживает получение видеопотока');
     }
 
-    // Register stream in go2rtc and return HLS URL for WAN access
+    // Register stream in go2rtc and return proxy URLs for clients
     let hlsUrl: string | undefined;
+    let rtspProxyUrl: string | undefined;
     if (this.go2rtcClient.isConfigured && result.url) {
       const channel = query.channel ?? device.defaultChannel ?? 1;
       const streamType = query.stream ?? device.defaultStream ?? 'main';
       const streamName = Go2rtcClient.streamName(deviceId, channel, streamType);
       await this.go2rtcClient.ensureStream(streamName, result.url);
       hlsUrl = this.go2rtcClient.getHlsUrl(streamName) ?? undefined;
+      // RTSP proxy: mobile clients prefer this over HLS (mpv handles RTSP startup delay gracefully)
+      rtspProxyUrl = this.go2rtcClient.getRtspProxyUrl(streamName) ?? undefined;
     }
 
-    return { ...result, hlsUrl };
+    return { ...result, hlsUrl, rtspProxyUrl };
   }
 
   async getDeviceInfo(deviceId: number, user: RequestUser): Promise<Record<string, unknown>> {
     const device = await this.devicesService.findById(deviceId);
     await this.accessService.assertCanAccessDevice(user, device.buildingId);
     switch (device.type) {
-      case DeviceType.AKUVOX:
-        return this.akuvoxClient.getSystemInfo(device);
       case DeviceType.UNIVIEW_IPC:
       case DeviceType.UNIVIEW_NVR:
         return this.univiewClient.getSystemInfo(device);
@@ -128,16 +129,6 @@ export class ControlService {
 
     let deviceEvents: Array<{ time: string; type: string; source: string; details: unknown }> = [];
     switch (device.type) {
-      case DeviceType.AKUVOX: {
-        const list = await this.akuvoxClient.getDoorLog(device);
-        deviceEvents = (Array.isArray(list) ? list : []).slice(0, limit).map((item: any) => ({
-          time: item.time ?? item.Time ?? item.date ?? new Date().toISOString(),
-          type: item.action ?? item.type ?? 'DOOR_OPEN',
-          source: 'AKUVOX',
-          details: item,
-        }));
-        break;
-      }
       case DeviceType.UNIVIEW_IPC:
       case DeviceType.UNIVIEW_NVR: {
         const list = await this.univiewClient.getEvents(
@@ -179,36 +170,38 @@ export class ControlService {
     this.univiewWs.stop(deviceId);
   }
 
-  /** Test connection to a device without saving it to DB. */
+  /** Test connection to a device. If dto.deviceId is set, the saved device (with its
+   *  encrypted credentials) is used; otherwise builds a temp device from dto fields. */
   async testConnection(
     dto: TestConnectionDto,
   ): Promise<{ reachable: boolean; info?: Record<string, unknown>; error?: string }> {
-    const tempDevice = {
-      id: 0,
-      buildingId: 0,
-      name: 'test',
-      host: dto.host,
-      type: dto.type,
-      role: DeviceRole.DOORPHONE,
-      httpPort: dto.httpPort ?? 80,
-      rtspPort: 554,
-      username: dto.username,
-      password: dto.password,
-    } as Device;
+    const probe: Device = dto.deviceId
+      ? await this.devicesService.findById(dto.deviceId)
+      : ({
+          id: 0,
+          buildingId: 0,
+          name: 'test',
+          host: dto.host,
+          type: dto.type,
+          role: DeviceRole.DOORPHONE,
+          httpPort: dto.httpPort ?? 80,
+          rtspPort: 554,
+          username: dto.username,
+          password: dto.password,
+        } as Device);
 
+    // Uniview NVR may need Basic→probe→Digest (3 requests); allow 12s
+    const timeoutMs = (probe.type === DeviceType.UNIVIEW_NVR) ? 12000 : 5000;
     const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Connection timeout (5s)')), 5000),
+      setTimeout(() => reject(new Error(`Connection timeout (${timeoutMs / 1000}s)`)), timeoutMs),
     );
 
     try {
       let info: Record<string, unknown>;
-      switch (dto.type) {
-        case DeviceType.AKUVOX:
-          info = await Promise.race([this.akuvoxClient.getSystemInfo(tempDevice), timeout]);
-          break;
+      switch (probe.type) {
         case DeviceType.UNIVIEW_IPC:
         case DeviceType.UNIVIEW_NVR:
-          info = await Promise.race([this.univiewClient.getSystemInfo(tempDevice), timeout]);
+          info = await Promise.race([this.univiewClient.getSystemInfo(probe), timeout]);
           break;
         default:
           if (dto.deviceId) await this.devicesService.updateStatus(dto.deviceId, 'offline');
@@ -248,84 +241,6 @@ export class ControlService {
       apartmentNumber: dto.apartmentNumber,
       snapshotUrl: dto.snapshotUrl,
     });
-  }
-
-  // ————— Akuvox proxy (device type must be AKUVOX) —————
-
-  async dial(deviceId: number, user: RequestUser) {
-    const device = await this.devicesService.findById(deviceId);
-    await this.accessService.assertCanAccessDevice(user, device.buildingId);
-    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
-    const result = await this.akuvoxClient.dial(device);
-    this.eventLogService.create(deviceId, 'dial', { userId: user.id, success: result.success }, { userId: user.id }).catch(() => {});
-    return result;
-  }
-
-  async hangup(deviceId: number, user: RequestUser) {
-    const device = await this.devicesService.findById(deviceId);
-    await this.accessService.assertCanAccessDevice(user, device.buildingId);
-    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
-    return this.akuvoxClient.hangup(device);
-  }
-
-  async getRelayList(deviceId: number, user: RequestUser) {
-    const device = await this.devicesService.findById(deviceId);
-    await this.accessService.assertCanAccessDevice(user, device.buildingId);
-    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
-    return this.akuvoxClient.getRelayList(device);
-  }
-
-  async relayTrig(deviceId: number, relayId: number, user: RequestUser) {
-    const device = await this.devicesService.findById(deviceId);
-    await this.accessService.assertCanAccessDevice(user, device.buildingId);
-    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
-    return this.akuvoxClient.relayTrig(device, relayId);
-  }
-
-  async getCallLog(deviceId: number, user: RequestUser) {
-    const device = await this.devicesService.findById(deviceId);
-    await this.accessService.assertCanAccessDevice(user, device.buildingId);
-    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
-    return this.akuvoxClient.getCallLog(device);
-  }
-
-  async getUserList(deviceId: number, user: RequestUser) {
-    const device = await this.devicesService.findById(deviceId);
-    await this.accessService.assertCanAccessDevice(user, device.buildingId);
-    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
-    return this.akuvoxClient.getUserList(device);
-  }
-
-  async addUser(
-    deviceId: number,
-    items: Array<{ Name: string; UserID: string; LiftFloorNum?: number; WebRelay?: number; 'Schedule-Relay'?: string }>,
-    user: RequestUser,
-  ) {
-    const device = await this.devicesService.findById(deviceId);
-    await this.accessService.assertCanAccessDevice(user, device.buildingId);
-    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
-    const result = await this.akuvoxClient.addUser(device, items);
-    this.eventLogService.create(deviceId, 'user_add', { userId: user.id, count: items.length, success: result.success }, { userId: user.id }).catch(() => {});
-    return result;
-  }
-
-  async getContacts(deviceId: number, user: RequestUser) {
-    const device = await this.devicesService.findById(deviceId);
-    await this.accessService.assertCanAccessDevice(user, device.buildingId);
-    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
-    return this.akuvoxClient.getContacts(device);
-  }
-
-  /** Akuvox: system/status + sip/status for online/SIP indicator. */
-  async getAkuvoxStatus(deviceId: number, user: RequestUser) {
-    const device = await this.devicesService.findById(deviceId);
-    await this.accessService.assertCanAccessDevice(user, device.buildingId);
-    if (device.type !== DeviceType.AKUVOX) throw new BadRequestException('Устройство не является панелью Akuvox');
-    const [systemStatus, sipStatus] = await Promise.all([
-      this.akuvoxClient.getSystemStatus(device).catch(() => ({})),
-      this.akuvoxClient.getSipStatus(device).catch(() => ({})),
-    ]);
-    return { system: systemStatus, sip: sipStatus };
   }
 
   // ————— Uniview proxy (device type UNIVIEW_IPC | UNIVIEW_NVR) —————

@@ -7,13 +7,13 @@ rtsp:
 log:
   level: info
 
+ffmpeg:
+  bin: ${FFMPEG_BIN:ffmpeg}
+
 # Стримы НЕ прописываются здесь статически — go2rtc моментально начинает
 # тянуть источник и буферизировать в памяти даже без клиентов.
-# Вместо этого бэкенд регистрирует стрим через PUT /api/streams только
-# когда пользователь открывает камеру (on-demand через ensureStream).
-# streams: {}  ← не нужно
+# Бэкенд регистрирует стрим через PUT /api/streams только когда пользователь
+# открывает камеру (on-demand через ensureStream).
 streams:
-  test_vlc:
-    - http://192.168.10.247:8080/live
-  device_16_ch1_main:
-    - rtsp://192.168.10.247:554/live
+  device_47_ch1_main:
+    - ffmpeg:rtsp://admin:QWERTY123456.@192.168.10.96:554/unicast/c1/s0/live#video=copy#audio=aac

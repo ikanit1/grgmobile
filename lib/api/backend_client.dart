@@ -421,7 +421,8 @@ class BackendClient {
   Future<List<RecentEventDto>> getRecentEvents({int limit = 5}) async {
     final res = await _getWithRetry('events?limit=$limit');
     if (res.statusCode != 200) throw BackendException(_errorMessage(res), res.statusCode);
-    final list = jsonDecode(res.body) as List<dynamic>;
+    final body = jsonDecode(res.body);
+    final list = (body is Map ? body['items'] : body) as List<dynamic>;
     return list.map((e) => RecentEventDto.fromJson(e as Map<String, dynamic>)).toList();
   }
 
@@ -717,7 +718,7 @@ class BuildingWithApartmentsDto {
       name: json['name'] as String? ?? '',
       address: json['address'] as String?,
       apartments: apts is List
-          ? (apts as List<dynamic>).map((e) => ApartmentDto.fromJson(e as Map<String, dynamic>)).toList()
+          ? (apts).map((e) => ApartmentDto.fromJson(e as Map<String, dynamic>)).toList()
           : [],
     );
   }

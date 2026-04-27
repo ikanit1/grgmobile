@@ -1,12 +1,11 @@
 // lib/widgets/rtsp_player_widget.dart
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-/// Reusable RTSP video player widget using media_kit.
-/// Supports live view and playback RTSP streams.
 class RtspPlayerWidget extends StatefulWidget {
   final String rtspUrl;
   final bool autoPlay;
@@ -28,50 +27,85 @@ class RtspPlayerWidget extends StatefulWidget {
 class RtspPlayerWidgetState extends State<RtspPlayerWidget> {
   late final Player _player;
   late final VideoController _controller;
+  StreamSubscription<bool>? _playingSub;
+  StreamSubscription<String>? _errorSub;
+  Timer? _retryTimer;
+  Timer? _timeoutTimer;
+
   bool _loading = true;
   String? _error;
   bool _muted = false;
+  int _retryCount = 0;
+
+  static const _maxRetries = 3;
+  static const _retryDelay = Duration(seconds: 3);
+  // go2rtc + FFmpeg может стартовать до 15 секунд при первом открытии
+  static const _timeout = Duration(seconds: 18);
 
   @override
   void initState() {
     super.initState();
     _player = Player();
     _controller = VideoController(_player);
+    _setupListeners();
     _openStream();
     WakelockPlus.enable();
   }
 
-  Future<void> _openStream() async {
-    try {
-      // Configure mpv for live streams (RTSP/HLS) — no seeking, low latency
-      if (!kIsWeb && _player.platform is NativePlayer) {
-        final native = _player.platform as NativePlayer;
-        await native.setProperty('force-seekable', 'yes');
-        await native.setProperty('rtsp-transport', 'tcp');
-        await native.setProperty('network-timeout', '10');
-        await native.setProperty('cache', 'no');
-        await native.setProperty('demuxer-lavf-analyzeduration', '0.5');
+  void _setupListeners() {
+    _playingSub = _player.stream.playing.listen((playing) {
+      if (!mounted || !playing) return;
+      _timeoutTimer?.cancel();
+      _retryTimer?.cancel();
+      _retryCount = 0;
+      if (_loading) setState(() { _loading = false; _error = null; });
+    });
+
+    _errorSub = _player.stream.error.listen((error) {
+      if (!mounted || error.isEmpty) return;
+      _timeoutTimer?.cancel();
+      if (_retryCount < _maxRetries) {
+        _retryCount++;
+        _retryTimer?.cancel();
+        _retryTimer = Timer(_retryDelay, _openStream);
+      } else {
+        if (mounted) setState(() { _error = error; _loading = false; });
       }
-      _player.stream.error.listen((error) {
-        if (mounted) setState(() => _error = error);
-      });
-      _player.stream.playing.listen((playing) {
-        if (mounted && playing && _loading) {
-          setState(() => _loading = false);
-        }
-      });
-      await _player.open(Media(widget.rtspUrl), play: widget.autoPlay);
-    } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    });
+  }
+
+  Future<void> _openStream() async {
+    if (!mounted) return;
+    setState(() { _loading = true; _error = null; });
+
+    if (!kIsWeb && _player.platform is NativePlayer) {
+      final native = _player.platform as NativePlayer;
+      await native.setProperty('rtsp-transport', 'tcp');
+      await native.setProperty('network-timeout', '10');
+      await native.setProperty('cache', 'no');
     }
+
+    await _player.open(Media(widget.rtspUrl), play: widget.autoPlay);
+
+    // Таймаут: если за N секунд воспроизведение не началось — считаем ошибкой
+    _timeoutTimer?.cancel();
+    _timeoutTimer = Timer(_timeout, () {
+      if (!mounted || !_loading) return;
+      if (_retryCount < _maxRetries) {
+        _retryCount++;
+        _openStream();
+      } else {
+        setState(() { _error = 'Не удалось открыть видеопоток'; _loading = false; });
+      }
+    });
   }
 
   @override
   void didUpdateWidget(RtspPlayerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.rtspUrl != widget.rtspUrl) {
-      setState(() { _loading = true; _error = null; });
-      _player.open(Media(widget.rtspUrl), play: widget.autoPlay);
+      _retryCount = 0;
+      _openStream();
     }
   }
 
@@ -86,6 +120,10 @@ class RtspPlayerWidgetState extends State<RtspPlayerWidget> {
 
   @override
   void dispose() {
+    _timeoutTimer?.cancel();
+    _retryTimer?.cancel();
+    _playingSub?.cancel();
+    _errorSub?.cancel();
     WakelockPlus.disable();
     _player.dispose();
     super.dispose();
@@ -101,10 +139,21 @@ class RtspPlayerWidgetState extends State<RtspPlayerWidget> {
           Center(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Text(
-                'Ошибка видеопотока: $_error',
-                style: const TextStyle(color: Colors.red),
-                textAlign: TextAlign.center,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Ошибка видеопотока: $_error',
+                    style: const TextStyle(color: Colors.red),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton.icon(
+                    onPressed: () { _retryCount = 0; _openStream(); },
+                    icon: const Icon(Icons.refresh, color: Colors.white70),
+                    label: const Text('Повторить', style: TextStyle(color: Colors.white70)),
+                  ),
+                ],
               ),
             ),
           )

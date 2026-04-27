@@ -1,20 +1,23 @@
 /// Response from GET /devices/:id/live-url
-/// Backend returns both direct RTSP (LAN) and go2rtc HLS (WAN) URLs.
 class LiveUrlDto {
-  /// Direct RTSP URL: rtsp://user:pass@host:554/...
-  /// Works on LAN; may not be reachable over cellular/internet.
+  /// Direct RTSP URL (camera credentials, LAN-only).
   final String rtspUrl;
 
-  /// HLS URL via go2rtc proxy: http://server:1984/api/stream.m3u8?src=...
-  /// Works over WAN; null if go2rtc not configured on server.
+  /// HLS URL via go2rtc (for web/browser).
   final String? hlsUrl;
 
-  const LiveUrlDto({required this.rtspUrl, this.hlsUrl});
+  /// RTSP proxy URL via go2rtc (rtsp://server:8554/stream_name).
+  /// Mobile clients prefer this: mpv handles RTSP startup delay gracefully,
+  /// while HLS returns empty m3u8 while FFmpeg is starting.
+  final String? rtspProxyUrl;
+
+  const LiveUrlDto({required this.rtspUrl, this.hlsUrl, this.rtspProxyUrl});
 
   factory LiveUrlDto.fromJson(Map<String, dynamic> json) {
     return LiveUrlDto(
       rtspUrl: json['url'] as String? ?? '',
       hlsUrl: json['hlsUrl'] as String?,
+      rtspProxyUrl: json['rtspProxyUrl'] as String?,
     );
   }
 }

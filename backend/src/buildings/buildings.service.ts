@@ -4,7 +4,7 @@ import { Cache } from 'cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Building } from './entities/building.entity';
-import { Device } from '../devices/entities/device.entity';
+import { Device, DeviceRole } from '../devices/entities/device.entity';
 import { ResidentialComplex } from '../residential-complexes/entities/residential-complex.entity';
 import { Organization } from '../organizations/entities/organization.entity';
 import { AccessService } from '../access/access.service';
@@ -155,10 +155,13 @@ export class BuildingsService {
       return devices;
     }
 
-    // RESIDENT: show devices with no floor restriction OR matching resident's floor(s)
+    // RESIDENT: hide NVR infrastructure; show devices with no floor restriction OR
+    // matching resident's floor(s)
     const all = await this.devicesRepo.find({ where: { buildingId } });
     return all.filter(
-      (d) => d.floor == null || residentFloors.includes(d.floor),
+      (d) =>
+        d.role !== DeviceRole.NVR &&
+        (d.floor == null || residentFloors.includes(d.floor)),
     );
   }
 
@@ -183,6 +186,7 @@ export class BuildingsService {
       defaultStream?: string;
       macAddress?: string;
       floor?: number | null;
+      nvrId?: number | null;
     },
     user: RequestUser,
   ): Promise<Device> {
@@ -234,6 +238,7 @@ export class BuildingsService {
       defaultStream: dto.defaultStream,
       macAddress: dto.macAddress,
       floor: dto.floor ?? null,
+      nvrId: dto.nvrId ?? null,
     });
     const saved = await this.devicesRepo.save(dev) as Device;
     this.eventLogService.create(null, EVENT_TYPE_DEVICE_ADDED, { name: dto.name, host: dto.host, type: dto.type }, {

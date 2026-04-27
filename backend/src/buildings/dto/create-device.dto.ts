@@ -59,4 +59,8 @@ export class CreateDeviceDto {
   @Min(0)
   @Max(200)
   floor?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  nvrId?: number | null;
 }

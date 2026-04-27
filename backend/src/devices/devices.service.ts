@@ -85,6 +85,7 @@ export class DevicesService {
     if (dto.macAddress !== undefined) dev.macAddress = dto.macAddress;
     if ('floor' in dto) dev.floor = dto.floor ?? null;
     if ('customRtspUrl' in dto) dev.customRtspUrl = dto.customRtspUrl ?? null;
+    if ('nvrId' in dto) dev.nvrId = dto.nvrId ?? null;
     const saved = await this.devicesRepo.save(dev);
     // Invalidate building devices cache
     await this.buildingsService.invalidateDevicesCache(saved.buildingId);

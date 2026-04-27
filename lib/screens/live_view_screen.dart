@@ -58,10 +58,16 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
       );
       if (!mounted) return;
 
-      // Prefer HLS when available — works everywhere (web, mobile, LTE, WiFi).
-      // Falls back to RTSP only if no HLS URL provided.
-      final useHls = liveUrl.hlsUrl != null && liveUrl.hlsUrl!.isNotEmpty;
-      final url = useHls ? liveUrl.hlsUrl! : liveUrl.rtspUrl;
+      // Mobile: go2rtc RTSP proxy (mpv waits for stream, no empty-m3u8 issue).
+      // Web: HLS (browsers don't support RTSP).
+      final String url;
+      if (!kIsWeb && liveUrl.rtspProxyUrl != null && liveUrl.rtspProxyUrl!.isNotEmpty) {
+        url = liveUrl.rtspProxyUrl!;
+      } else if (liveUrl.hlsUrl != null && liveUrl.hlsUrl!.isNotEmpty) {
+        url = liveUrl.hlsUrl!;
+      } else {
+        url = liveUrl.rtspUrl;
+      }
 
       if (url.trim().isEmpty) {
         setState(() => _error = 'Не получен адрес видеопотока');

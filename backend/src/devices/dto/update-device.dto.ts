@@ -67,4 +67,8 @@ export class UpdateDeviceDto {
   @IsOptional()
   @IsString()
   customRtspUrl?: string | null;
+
+  @IsOptional()
+  @IsNumber()
+  nvrId?: number | null;
 }

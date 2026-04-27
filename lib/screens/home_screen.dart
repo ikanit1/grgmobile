@@ -14,10 +14,7 @@ import '../widgets/slide_route.dart';
 import 'add_device_screen.dart';
 import 'applications_screen.dart';
 import 'live_view_screen.dart';
-import 'door_control_screen.dart';
-import 'door_log_screen.dart';
 import 'settings_screen.dart';
-import 'system_info_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final DeviceSettings? settings;
@@ -145,40 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          _buildCard(
-            context,
-            icon: Icons.door_front_door,
-            title: 'Управление дверью',
-            subtitle: 'Открыть дверь, просмотр камеры',
-            onTap: () => Navigator.push(
-              context,
-              SlideRoute(builder: (_) => DoorControlScreen(settings: s)),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildCard(
-            context,
-            icon: Icons.history,
-            title: 'Журнал открытий',
-            subtitle: 'История событий двери',
-            onTap: () => Navigator.push(
-              context,
-              SlideRoute(builder: (_) => DoorLogScreen(settings: s)),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildCard(
-            context,
-            icon: Icons.info_outline,
-            title: 'Информация об устройстве',
-            subtitle: 'Системные данные панели',
-            onTap: () => Navigator.push(
-              context,
-              SlideRoute(builder: (_) => SystemInfoScreen(settings: s)),
-            ),
-          ),
           if (widget.onOpenSettingsTab != null) ...[
-            const SizedBox(height: 12),
             _buildCard(
               context,
               icon: Icons.settings_outlined,
@@ -303,16 +267,20 @@ class _BackendHomeContentState extends State<_BackendHomeContent> {
     });
     try {
       final list = await widget.client.getBuildings();
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _buildings = list;
         _loading = false;
       });
+      }
       if (mounted) _loadEvents();
     } catch (e) {
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _error = e.toString();
         _loading = false;
       });
+      }
     }
   }
 
@@ -335,15 +303,19 @@ class _BackendHomeContentState extends State<_BackendHomeContent> {
     try {
       final events = await widget.client.getRecentEvents(limit: 5);
       final count = await widget.client.getUnreadEventsCount();
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _recentEvents = events;
         _unreadCount = count;
       });
+      }
     } catch (_) {
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _recentEvents = [];
         _unreadCount = 0;
       });
+      }
     }
   }
 
@@ -671,10 +643,12 @@ class _AllEventsScreenState extends State<_AllEventsScreen> {
     setState(() => _loading = true);
     try {
       final list = await widget.client.getRecentEvents(limit: 50);
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _events = list;
         _loading = false;
       });
+      }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }

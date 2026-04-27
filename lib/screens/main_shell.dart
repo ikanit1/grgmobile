@@ -53,8 +53,11 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
-    if (widget.backendClient == null) _loadSettings();
-    else setState(() => _settingsLoading = false);
+    if (widget.backendClient == null) {
+      _loadSettings();
+    } else {
+      setState(() => _settingsLoading = false);
+    }
     _loadUnreadCount();
     _unreadSub = EventsSocketService.instance.events.listen((_) {
       _loadUnreadCount();

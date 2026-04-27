@@ -301,25 +301,18 @@
 
     const headers = () => ({ Authorization: 'Bearer ' + (token || localStorage.getItem('doorphone_token') || '') });
 
-    // ─── Tab renderers (T21: decomposed from fetchData) ─────────────────────────
-    // Each async renderer receives the `content` DOM element and handles one tab.
-    // renderDashboard, renderApartments, renderApplications, renderEvents,
-    // renderUserApt, renderResidents, renderDevices, renderGenericTab are
-    // all defined inline within fetchData below and dispatched via switch.
-
+    // ─── Tab dispatcher (T21: each tab handled by named renderX() defined inside fetchData)
     async function fetchData(tab) {
       token = token || localStorage.getItem('doorphone_token');
       const content = document.getElementById('dataContent');
       const createSection = document.getElementById('createSection');
       createSection.style.display = 'none';
       document.getElementById('residentSection').style.display = 'none';
-      document.getElementById('nvrChannelsSection').style.display = 'none';
+
       content.textContent = 'Загрузка…';
       if (!token || !String(token).trim()) { content.textContent = 'Сначала войдите.'; return; }
       try {
-        // Switch dispatcher — each case is a self-contained tab renderer
-        // (full extraction into separate top-level functions is Sprint 4 P3 follow-up)
-        if (tab === 'dashboard') {
+        async function renderDashboard() {
           const [s, evResult] = await Promise.all([
             apiJson('/admin/dashboard'),
             apiJson('/events?limit=5').catch(() => ({ items: [] })),
@@ -371,9 +364,9 @@
               if (btn) btn.click();
             });
           });
-          return;
         }
-        if (tab === 'apartments') {
+
+        async function renderApartments() {
           const buildings = await apiJson('/buildings');
           const buildingOpts = Array.isArray(buildings) ? buildings.map(function(b) { return '<option value="' + b.id + '">' + esc(b.name || b.id) + '</option>'; }).join('') : '';
           let html = '<div class="card" style="margin-bottom:1rem;"><h2>Создать квартиру</h2><form id="formCreateAptTop"><label for="aptBuildingIdTop">Здание</label> <select id="aptBuildingIdTop">' + buildingOpts + '</select> <input id="aptNumberTop" placeholder="Номер квартиры" required> <input id="aptFloorTop" type="number" placeholder="Этаж"> <input id="aptExtensionTop" placeholder="Расширение (SIP/номер монитора)"> <button type="submit">Создать</button></form><div id="createAptMsgTop" class="msg" style="display:none;"></div><p class="meta" style="margin-top:0.75rem;">Для Akuvox: номера квартир должны совпадать с номерами в вебхуке. Расширение — SIP-номер монитора.</p></div>';
@@ -452,9 +445,9 @@
             });
           });
           addCreateForm('apartments');
-          return;
         }
-        if (tab === 'applications') {
+
+        async function renderApplications() {
           // T15: restore saved filters
           let appFilters = {};
           try { appFilters = JSON.parse(sessionStorage.getItem('admin_app_filters') || '{}'); } catch (_) {}
@@ -544,9 +537,9 @@
               } catch (e) { if (!(e instanceof ApiUnauthorized)) toast.err(e.message); }
             });
           });
-          return;
         }
-        if (tab === 'events') {
+
+        async function renderEvents() {
           // Load devices list for filter dropdown
           const buildings = await apiJson('/buildings').catch(() => []);
           const devicesByBuilding = await Promise.all(
@@ -626,9 +619,9 @@
             loadEvents();
           });
           loadEvents();
-          return;
         }
-        if (tab === 'user_apt') {
+
+        async function renderUserApt() {
           content.innerHTML = '<div class="card"><h2>Квартиры жителей</h2>' +
             '<div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">' +
             '<input id="uaSearch" type="text" placeholder="Email или телефон пользователя" style="width:280px;">' +
@@ -713,9 +706,9 @@
           document.getElementById('uaSearch').addEventListener('keydown', function(e) {
             if (e.key === 'Enter') document.getElementById('uaSearchBtn').click();
           });
-          return;
         }
-        if (tab === 'residents') {
+
+        async function renderResidents() {
           const buildings = await apiJson('/buildings');
           let html = '<p style="margin-bottom:1rem;">Выберите здание, затем квартиру — чтобы добавить/удалить жителя. Либо импортируйте жителей по зданию:</p>';
           const aptsByBuilding = await Promise.all(
@@ -760,9 +753,9 @@
             const savedApt = JSON.parse(sessionStorage.getItem('admin_last_apt') || 'null');
             if (savedApt && savedApt.id) showResidents(savedApt.id, savedApt.name || '');
           } catch (_) {}
-          return;
         }
-        if (tab === 'devices') {
+
+        async function renderDevicesTab() {
           const buildings = await apiJson('/buildings');
           const devicesByBuilding = await Promise.all(
             buildings.map(b =>
@@ -786,7 +779,7 @@
           const buildingFilterOpts = '<option value="">Все здания</option>' +
             buildings.map(b => '<option value="' + b.id + '"' + (String(savedFilters.building) === String(b.id) ? ' selected' : '') + '>' + esc(b.name || b.id) + '</option>').join('');
 
-          let html = '<div class="card" style="margin-bottom:1rem;"><p class="meta" style="margin:0;"><strong>Uniview NVR:</strong> добавьте NVR как одно устройство (роль NVR), затем используйте «Быстрое добавление каналов NVR» ниже. Вызывные панели — роль Домофон. Поле <strong>Этаж</strong>: пусто = видят все жители; число = только жители этого этажа.</p></div>';
+          let html = '<div class="card" style="margin-bottom:1rem;"><p class="meta" style="margin:0;"><strong>Uniview NVR:</strong> добавьте NVR как устройство с ролью NVR — кнопка «🔄 Камеры» синхронизирует подключённые к нему камеры. Вызывные панели — роль Домофон. Поле <strong>Этаж</strong>: пусто = видят все жители; число = только жители этого этажа.</p></div>';
           html += '<div id="devFiltersBar" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">' +
             '<input id="devSearch" placeholder="Поиск по имени, IP, ID..." style="min-width:220px;" value="' + esc(savedFilters.search || '') + '">' +
             '<select id="devTypeFilter"><option value="">Все типы</option><option' + (savedFilters.type === 'UNIVIEW_IPC' ? ' selected' : '') + '>UNIVIEW_IPC</option><option' + (savedFilters.type === 'UNIVIEW_NVR' ? ' selected' : '') + '>UNIVIEW_NVR</option><option' + (savedFilters.type === 'AKUVOX' ? ' selected' : '') + '>AKUVOX</option><option' + (savedFilters.type === 'OTHER' ? ' selected' : '') + '>OTHER</option></select>' +
@@ -830,6 +823,33 @@
             if (!area) return;
             if (filtered.length === 0) { area.innerHTML = '<p style="color:var(--grg-ink-400);">Нет устройств по выбранным фильтрам.</p>'; return; }
 
+            function renderDeviceRow(d, indent) {
+              const floorBadge = d.floor != null ? '<span class="badge" style="background:var(--accent-dim);">эт.' + d.floor + '</span>' : '<span style="color:var(--grg-ink-400);font-size:11px;">все</span>';
+              const chBadge = d.defaultChannel != null ? d.defaultChannel : '<span style="color:var(--grg-ink-400);">—</span>';
+              const isOnline = d.status === 'online';
+              const statusBadge = isOnline
+                ? '<span style="font-size:11px;background:rgba(61,213,152,0.18);color:var(--grg-success);padding:2px 8px;border-radius:99px;">● online</span>'
+                : '<span style="font-size:11px;background:rgba(255,107,107,0.18);color:var(--grg-danger);padding:2px 8px;border-radius:99px;">○ offline</span>';
+              const namePrefix = indent ? '<span style="color:var(--grg-ink-400);margin-right:4px;">└</span>' : '';
+              const rowStyle = indent ? ' style="background:rgba(255,255,255,0.02);"' : '';
+              return '<tr' + rowStyle + '>' +
+                '<td><code>' + d.id + '</code></td>' +
+                '<td>' + namePrefix + esc(d.name || '') + '</td>' +
+                '<td><span class="badge">' + esc(d.type || '') + '</span></td>' +
+                '<td>' + esc(d.role || '') + '</td>' +
+                '<td><code>' + esc(d.host || '') + '</code></td>' +
+                '<td>' + chBadge + '</td>' +
+                '<td>' + floorBadge + '</td>' +
+                '<td>' + statusBadge + '</td>' +
+                '<td>' +
+                  '<button type="button" class="dev-edit secondary" data-device-id="' + d.id + '">Изменить</button> ' +
+                  (d.role === 'NVR' ? '<button type="button" class="dev-scan-ch secondary" data-device-id="' + d.id + '" data-building-id="' + d.buildingId + '" data-device-name="' + esc(d.name || '#' + d.id) + '" title="Синхронизировать камеры NVR">🔄 Камеры</button> ' : '') +
+                  '<button type="button" class="dev-open-door secondary" data-device-id="' + d.id + '" data-device-name="' + esc(d.name || '#' + d.id) + '" title="Открыть дверь">🔓</button> ' +
+                  '<button type="button" class="dev-test secondary" data-device-id="' + d.id + '" title="Проверить связь">🔌</button> ' +
+                  '<button type="button" class="dev-delete danger" data-device-id="' + d.id + '" data-device-name="' + esc(d.name || '#' + d.id) + '">Удалить</button>' +
+                '</td></tr>';
+            }
+
             let areaHtml = '';
             buildingOrder.forEach(key => {
               const bg = byBuilding[key];
@@ -838,33 +858,33 @@
                 '<span style="font-size:13px;font-weight:700;">🏢 ' + esc(bg.name) + '</span>' +
                 '<span style="color:var(--grg-ink-400);font-size:12px;">id=' + bg.id + '</span>' +
                 '<span style="font-size:11px;background:var(--accent-dim);color:#fff;padding:1px 8px;border-radius:99px;">' + bg.devs.length + ' устр.</span>' +
-                (onlineCnt > 0 ? '<span style="font-size:11px;background:#1a7a1a;color:#a8f0a8;padding:1px 8px;border-radius:99px;">● ' + onlineCnt + ' online</span>' : '') +
+                (onlineCnt > 0 ? '<span style="font-size:11px;background:rgba(61,213,152,0.18);color:var(--grg-success);padding:1px 8px;border-radius:99px;">● ' + onlineCnt + ' online</span>' : '') +
                 '</div>';
               areaHtml += '<table><thead><tr><th>ID</th><th>Имя</th><th>Тип</th><th>Роль</th><th>Хост</th><th>Канал</th><th>Этаж</th><th>Статус</th><th>Действия</th></tr></thead><tbody>';
+
+              // Build lookup: nvrId → child cameras
+              const childrenByNvr = {};
+              const topLevel = [];
               bg.devs.forEach(d => {
-                const floorBadge = d.floor != null ? '<span class="badge" style="background:var(--accent-dim);">эт.' + d.floor + '</span>' : '<span style="color:var(--grg-ink-400);font-size:11px;">все</span>';
-                const chBadge = d.defaultChannel != null ? d.defaultChannel : '<span style="color:var(--grg-ink-400);">—</span>';
-                const isOnline = d.status === 'online';
-                const statusBadge = isOnline
-                  ? '<span style="font-size:11px;background:#1a7a1a;color:#a8f0a8;padding:2px 8px;border-radius:99px;">● online</span>'
-                  : '<span style="font-size:11px;background:#3a1a1a;color:#f0a8a8;padding:2px 8px;border-radius:99px;">○ offline</span>';
-                areaHtml += '<tr>' +
-                  '<td><code>' + d.id + '</code></td>' +
-                  '<td>' + esc(d.name || '') + '</td>' +
-                  '<td><span class="badge">' + esc(d.type || '') + '</span></td>' +
-                  '<td>' + esc(d.role || '') + '</td>' +
-                  '<td><code>' + esc(d.host || '') + '</code></td>' +
-                  '<td>' + chBadge + '</td>' +
-                  '<td>' + floorBadge + '</td>' +
-                  '<td>' + statusBadge + '</td>' +
-                  '<td>' +
-                    '<button type="button" class="dev-edit secondary" data-device-id="' + d.id + '">Изменить</button> ' +
-                    (d.role === 'NVR' ? '<button type="button" class="dev-scan-ch secondary" data-device-id="' + d.id + '" data-building-id="' + d.buildingId + '" data-device-name="' + esc(d.name || '#' + d.id) + '" title="Сканировать каналы NVR">📷 Каналы</button> ' : '') +
-                    '<button type="button" class="dev-open-door secondary" data-device-id="' + d.id + '" data-device-name="' + esc(d.name || '#' + d.id) + '" title="Открыть дверь">🔓</button> ' +
-                    '<button type="button" class="dev-test secondary" data-device-id="' + d.id + '" title="Проверить связь">🔌</button> ' +
-                    '<button type="button" class="dev-delete danger" data-device-id="' + d.id + '" data-device-name="' + esc(d.name || '#' + d.id) + '">Удалить</button>' +
-                  '</td></tr>';
+                if (d.nvrId) {
+                  if (!childrenByNvr[d.nvrId]) childrenByNvr[d.nvrId] = [];
+                  childrenByNvr[d.nvrId].push(d);
+                } else {
+                  topLevel.push(d);
+                }
               });
+
+              topLevel.forEach(d => {
+                areaHtml += renderDeviceRow(d, false);
+                // Inline scan-channels panel (preserved)
+                areaHtml += '<tr id="scan-ch-tr-' + d.id + '" style="display:none;"><td colspan="9"><div id="scan-ch-panel-' + d.id + '"></div></td></tr>';
+                // Nested cameras belonging to this NVR
+                const children = childrenByNvr[d.id] || [];
+                children.forEach(ch => {
+                  areaHtml += renderDeviceRow(ch, true);
+                });
+              });
+
               areaHtml += '</tbody></table>';
             });
             area.innerHTML = areaHtml;
@@ -933,6 +953,7 @@
                 const d = await r.json().catch(() => ({}));
                 if (d.reachable) toast.ok('🔌 Устройство #' + id + ' доступно');
                 else toast.err('🔌 Устройство #' + id + ': ' + (d.error || 'недоступно'));
+                await renderDevicesTab();
               } catch (e) { if (!(e instanceof ApiUnauthorized)) toast.err(e.message); }
               finally { btn.textContent = origText; btn.disabled = false; }
               return;
@@ -963,14 +984,16 @@
                 panel.className = 'scan-ch-panel';
                 btn.closest('table').after(panel);
               }
-              panel.innerHTML = '<div class="scan-result-row" style="color:var(--grg-ink-400);">🔍 Сканирую каналы NVR «' + esc(devName) + '»...</div>';
+              const scanTr = document.getElementById('scan-ch-tr-' + devId);
+              if (scanTr) scanTr.style.display = '';
+              panel.innerHTML = '<div class="scan-result-row" style="color:var(--grg-ink-400);">🔍 Получаю камеры от «' + esc(devName) + '»...</div>';
               try {
                 const r = await apiFetch('/devices/' + devId + '/scan-channels', { method: 'POST' });
                 const channels = r.ok ? await r.json() : [];
                 if (!channels.length) {
                   panel.innerHTML = '<div class="scan-result-row" style="color:var(--grg-ink-400);">Активных каналов не найдено.</div>';
                 } else {
-                  let pHtml = '<div class="scan-result-header">📷 КАНАЛЫ NVR «' + esc(devName) + '»: ' + channels.length + ' шт.</div>';
+                  let pHtml = '<div class="scan-result-header">📷 Камеры регистратора «' + esc(devName) + '»: ' + channels.length + ' шт.</div>';
                   channels.forEach(ch => {
                     pHtml += '<div class="scan-result-row">' +
                       '<span style="font-weight:700;color:var(--grg-purple-300);">CH ' + ch.channel + '</span>' +
@@ -995,6 +1018,7 @@
                         defaultChannel: parseInt(this.dataset.channel, 10),
                         defaultStream: 'main',
                         username: this.dataset.login || undefined,
+                        nvrId: devId,
                       };
                       this.textContent = '⏳'; this.disabled = true;
                       try {
@@ -1019,44 +1043,9 @@
           });
 
           showCreateDeviceForm(buildings);
-          const nvrSec = document.getElementById('nvrChannelsSection');
-          nvrSec.style.display = 'block';
-          const nvrBldSel = document.getElementById('nvrBuildingId');
-          nvrBldSel.innerHTML = buildings.map(b => '<option value="' + b.id + '">' + esc(b.name || b.id) + '</option>').join('');
-          document.getElementById('nvrChannelsForm').onsubmit = async function(e) {
-            e.preventDefault();
-            const msgEl = document.getElementById('nvrChannelsMsg');
-            const bid = document.getElementById('nvrBuildingId').value;
-            const host = document.getElementById('nvrHost').value.trim();
-            const user = document.getElementById('nvrUser').value.trim();
-            const pass = document.getElementById('nvrPass').value;
-            const hp = parseInt(document.getElementById('nvrHttpPort').value, 10) || 80;
-            const rp = parseInt(document.getElementById('nvrRtspPort').value, 10) || 554;
-            const from = parseInt(document.getElementById('nvrChannelFrom').value, 10) || 1;
-            const to = parseInt(document.getElementById('nvrChannelTo').value, 10) || 4;
-            const prefix = document.getElementById('nvrNamePrefix').value.trim() || 'Камера';
-            if (!host) { showMsg(msgEl, 'Укажите IP NVR', true); return; }
-            if (from > to || to - from > 31) { showMsg(msgEl, 'Каналы: от 1 до 32 за раз', true); return; }
-            const total = to - from + 1;
-            const failedChs = [];
-            let ok = 0;
-            msgEl.textContent = 'Создание 0 / ' + total + '…'; msgEl.className = 'msg'; msgEl.style.display = 'block';
-            for (let ch = from; ch <= to; ch++) {
-              msgEl.textContent = 'Создание ' + (ch - from + 1) + ' / ' + total + ' (канал ' + ch + ')…';
-              try {
-                const body = { name: prefix + ' ' + ch, host, type: 'UNIVIEW_NVR', role: 'CAMERA', httpPort: hp, rtspPort: rp, defaultChannel: ch, defaultStream: 'main' };
-                if (user) body.username = user;
-                if (pass) body.password = pass;
-                const r = await apiFetch('/buildings/' + bid + '/devices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-                if (r.ok) ok++; else failedChs.push(ch);
-              } catch (_) { failedChs.push(ch); }
-            }
-            const errInfo = failedChs.length ? ' Ошибки каналов: ' + failedChs.join(', ') : '';
-            showMsg(msgEl, 'Готово: создано ' + ok + (failedChs.length ? ', ошибок ' + failedChs.length + '.' + errInfo : ''), failedChs.length > 0);
-            if (ok > 0) fetchData('devices');
-          };
-          return;
         }
+
+        async function renderGenericTab(tab) {
         let urlPath2 = '';
         if (tab === 'organizations') urlPath2 = '/organizations';
         else if (tab === 'complexes') urlPath2 = '/complexes';
@@ -1303,8 +1292,20 @@
             data.map(row => '<tr>' + keys.map(k => '<td>' + esc(row[k] != null ? String(row[k]) : '') + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
         }
         addCreateForm(tab);
+        }
+
+        switch (tab) {
+          case 'dashboard':    await renderDashboard(); break;
+          case 'apartments':   await renderApartments(); break;
+          case 'applications': await renderApplications(); break;
+          case 'events':       await renderEvents(); break;
+          case 'user_apt':     await renderUserApt(); break;
+          case 'residents':    await renderResidents(); break;
+          case 'devices':      await renderDevicesTab(); break;
+          default:             await renderGenericTab(tab); break;
+        }
       } catch (e) {
-        content.textContent = 'Ошибка: ' + e.message;
+        if (!(e instanceof ApiUnauthorized)) content.textContent = 'Ошибка: ' + e.message;
       }
     }
 
