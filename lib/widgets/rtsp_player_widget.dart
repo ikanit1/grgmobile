@@ -1,7 +1,7 @@
-// lib/widgets/rtsp_player_widget.dart
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:gal/gal.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -24,9 +24,12 @@ class RtspPlayerWidget extends StatefulWidget {
   State<RtspPlayerWidget> createState() => RtspPlayerWidgetState();
 }
 
-class RtspPlayerWidgetState extends State<RtspPlayerWidget> {
+class RtspPlayerWidgetState extends State<RtspPlayerWidget>
+    with WidgetsBindingObserver {
   late final Player _player;
   late final VideoController _controller;
+  final _transformController = TransformationController();
+
   StreamSubscription<bool>? _playingSub;
   StreamSubscription<String>? _errorSub;
   Timer? _retryTimer;
@@ -36,6 +39,7 @@ class RtspPlayerWidgetState extends State<RtspPlayerWidget> {
   String? _error;
   bool _muted = false;
   int _retryCount = 0;
+  bool _wasPlayingBeforeBackground = false;
 
   static const _maxRetries = 3;
   static const _retryDelay = Duration(seconds: 3);
@@ -45,11 +49,28 @@ class RtspPlayerWidgetState extends State<RtspPlayerWidget> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _player = Player();
     _controller = VideoController(_player);
     _setupListeners();
     _openStream();
     WakelockPlus.enable();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        _wasPlayingBeforeBackground = _player.state.playing;
+        if (_wasPlayingBeforeBackground) _player.pause();
+      case AppLifecycleState.resumed:
+        if (_wasPlayingBeforeBackground && !_player.state.playing) {
+          _player.play();
+        }
+      default:
+        break;
+    }
   }
 
   void _setupListeners() {
@@ -80,14 +101,17 @@ class RtspPlayerWidgetState extends State<RtspPlayerWidget> {
 
     if (!kIsWeb && _player.platform is NativePlayer) {
       final native = _player.platform as NativePlayer;
+      // Low-latency profile — убирает буферизацию декодера и демаксера
+      await native.setProperty('profile', 'low-latency');
       await native.setProperty('rtsp-transport', 'tcp');
       await native.setProperty('network-timeout', '10');
       await native.setProperty('cache', 'no');
+      await native.setProperty('demuxer-lavf-o-set', 'fflags=nobuffer');
+      await native.setProperty('vd-lavc-threads', '1');
     }
 
     await _player.open(Media(widget.rtspUrl), play: widget.autoPlay);
 
-    // Таймаут: если за N секунд воспроизведение не началось — считаем ошибкой
     _timeoutTimer?.cancel();
     _timeoutTimer = Timer(_timeout, () {
       if (!mounted || !_loading) return;
@@ -117,13 +141,48 @@ class RtspPlayerWidgetState extends State<RtspPlayerWidget> {
   }
 
   bool get isMuted => _muted;
+  bool get isLoading => _loading;
+
+  void resetZoom() => _transformController.value = Matrix4.identity();
+
+  Future<void> takeSnapshot(BuildContext context) async {
+    if (_loading || _error != null) return;
+    try {
+      final bytes = await _player.screenshot();
+      if (bytes == null || bytes.isEmpty) return;
+      if (!context.mounted) return;
+
+      final hasAccess = await Gal.hasAccess(toAlbum: true);
+      if (!hasAccess) {
+        await Gal.requestAccess(toAlbum: true);
+      }
+      await Gal.putImageBytes(bytes, album: 'GRG');
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Снимок сохранён в галерею'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось сохранить: $e')),
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timeoutTimer?.cancel();
     _retryTimer?.cancel();
     _playingSub?.cancel();
     _errorSub?.cancel();
+    _transformController.dispose();
     WakelockPlus.disable();
     _player.dispose();
     super.dispose();
@@ -142,10 +201,20 @@ class RtspPlayerWidgetState extends State<RtspPlayerWidget> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  const Icon(Icons.videocam_off, color: Colors.white38, size: 48),
+                  const SizedBox(height: 12),
                   Text(
-                    'Ошибка видеопотока: $_error',
-                    style: const TextStyle(color: Colors.red),
+                    'Ошибка видеопотока',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 16),
                   TextButton.icon(
@@ -158,7 +227,13 @@ class RtspPlayerWidgetState extends State<RtspPlayerWidget> {
             ),
           )
         else
-          Video(controller: _controller, fill: Colors.black),
+          // Pinch-to-zoom + pan
+          InteractiveViewer(
+            transformationController: _transformController,
+            minScale: 1.0,
+            maxScale: 5.0,
+            child: Video(controller: _controller, fill: Colors.black),
+          ),
         if (widget.overlay != null) widget.overlay!,
       ],
     );

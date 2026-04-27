@@ -47,5 +47,9 @@
 		<true/>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>GRG сохраняет снимки с камер домофона в вашу галерею</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>GRG сохраняет снимки с камер домофона в вашу галерею</string>
 	</dict>
 </plist>

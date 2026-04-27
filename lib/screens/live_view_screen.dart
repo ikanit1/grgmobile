@@ -1,7 +1,7 @@
-// lib/screens/live_view_screen.dart
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../api/backend_client.dart';
 import '../services/stream_quality_service.dart';
 import '../widgets/rtsp_player_widget.dart';
@@ -29,24 +29,39 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
   bool _openDoorLoading = false;
   bool _ptzSupported = false;
   bool _showPtz = false;
+  bool _controlsVisible = true;
   final _playerKey = GlobalKey<RtspPlayerWidgetState>();
   StreamSubscription? _connectivitySub;
+  Timer? _hideTimer;
 
   @override
   void initState() {
     super.initState();
     _loadLiveUrl();
     _checkPtz();
-    // Restart stream automatically on network type change
     _connectivitySub = StreamQualityService.instance.onChanged.listen((_) {
       if (mounted) _loadLiveUrl();
     });
+    _scheduleHide();
   }
 
   @override
   void dispose() {
     _connectivitySub?.cancel();
+    _hideTimer?.cancel();
     super.dispose();
+  }
+
+  void _scheduleHide() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _controlsVisible = false);
+    });
+  }
+
+  void _onTapVideo() {
+    setState(() => _controlsVisible = !_controlsVisible);
+    if (_controlsVisible) _scheduleHide();
   }
 
   Future<void> _loadLiveUrl() async {
@@ -58,8 +73,6 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
       );
       if (!mounted) return;
 
-      // Mobile: go2rtc RTSP proxy (mpv waits for stream, no empty-m3u8 issue).
-      // Web: HLS (browsers don't support RTSP).
       final String url;
       if (!kIsWeb && liveUrl.rtspProxyUrl != null && liveUrl.rtspProxyUrl!.isNotEmpty) {
         url = liveUrl.rtspProxyUrl!;
@@ -82,9 +95,7 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
   Future<void> _checkPtz() async {
     try {
       final caps = await widget.client.getPtzCapabilities(widget.deviceId);
-      if (mounted) {
-        setState(() => _ptzSupported = caps['Supported'] == true);
-      }
+      if (mounted) setState(() => _ptzSupported = caps['Supported'] == true);
     } catch (_) {}
   }
 
@@ -118,45 +129,104 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
     try { await widget.client.ptzStop(widget.deviceId); } catch (_) {}
   }
 
+  void _openFullscreen() {
+    if (_streamUrl == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _FullscreenVideoPage(
+          streamUrl: _streamUrl!,
+          deviceName: widget.deviceName,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: Text(widget.deviceName),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        actions: [
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _onTapVideo,
+        child: Stack(
+          children: [
+            // Video area
+            Positioned.fill(
+              child: _streamUrl != null
+                  ? RtspPlayerWidget(key: _playerKey, rtspUrl: _streamUrl!)
+                  : _error != null
+                      ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
+                      : const Center(child: CircularProgressIndicator()),
+            ),
+
+            // PTZ overlay
+            if (_showPtz && _ptzSupported)
+              Positioned(
+                left: 0, right: 0, bottom: 80,
+                child: _buildPtzControls(),
+              ),
+
+            // Top app bar (auto-hide)
+            AnimatedSlide(
+              offset: _controlsVisible ? Offset.zero : const Offset(0, -1),
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              child: _buildTopBar(),
+            ),
+
+            // Bottom bar (auto-hide)
+            Positioned(
+              left: 0, right: 0, bottom: 0,
+              child: AnimatedSlide(
+                offset: _controlsVisible ? Offset.zero : const Offset(0, 1),
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                child: _buildBottomBar(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    final isMuted = _playerKey.currentState?.isMuted == true;
+    return SafeArea(
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          Expanded(
+            child: Text(
+              widget.deviceName,
+              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
           if (_ptzSupported)
             IconButton(
-              icon: Icon(_showPtz ? Icons.gamepad : Icons.gamepad_outlined),
+              icon: Icon(_showPtz ? Icons.gamepad : Icons.gamepad_outlined, color: Colors.white),
               onPressed: () => setState(() => _showPtz = !_showPtz),
               tooltip: 'PTZ',
             ),
           IconButton(
-            icon: Icon(
-              _playerKey.currentState?.isMuted == true ? Icons.volume_off : Icons.volume_up,
-            ),
-            onPressed: () {
-              _playerKey.currentState?.toggleMute();
-              setState(() {});
-            },
+            icon: Icon(isMuted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
+            onPressed: () { _playerKey.currentState?.toggleMute(); setState(() {}); },
             tooltip: 'Звук',
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            flex: 3,
-            child: _streamUrl != null
-                ? RtspPlayerWidget(key: _playerKey, rtspUrl: _streamUrl!)
-                : _error != null
-                    ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
-                    : const Center(child: CircularProgressIndicator()),
+          IconButton(
+            icon: const Icon(Icons.camera_alt_outlined, color: Colors.white),
+            onPressed: () => _playerKey.currentState?.takeSnapshot(context),
+            tooltip: 'Снимок',
           ),
-          if (_showPtz && _ptzSupported) _buildPtzControls(),
-          _buildBottomBar(),
+          IconButton(
+            icon: const Icon(Icons.fullscreen, color: Colors.white),
+            onPressed: _openFullscreen,
+            tooltip: 'Полный экран',
+          ),
         ],
       ),
     );
@@ -206,18 +276,129 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
   }
 
   Widget _buildBottomBar() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [Colors.black87, Colors.transparent],
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              ElevatedButton.icon(
+                onPressed: _openDoorLoading ? null : _openDoor,
+                icon: _openDoorLoading
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.lock_open),
+                label: Text(_openDoorLoading ? 'Открываю...' : 'Открыть дверь'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.purple,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Fullscreen route — landscape + immersive mode
+class _FullscreenVideoPage extends StatefulWidget {
+  final String streamUrl;
+  final String deviceName;
+
+  const _FullscreenVideoPage({required this.streamUrl, required this.deviceName});
+
+  @override
+  State<_FullscreenVideoPage> createState() => _FullscreenVideoPageState();
+}
+
+class _FullscreenVideoPageState extends State<_FullscreenVideoPage> {
+  final _playerKey = GlobalKey<RtspPlayerWidgetState>();
+  bool _controlsVisible = true;
+  Timer? _hideTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
+    _scheduleHide();
+  }
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
+  void _scheduleHide() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _controlsVisible = false);
+    });
+  }
+
+  void _onTap() {
+    setState(() => _controlsVisible = !_controlsVisible);
+    if (_controlsVisible) _scheduleHide();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _onTap,
+        child: Stack(
           children: [
-            ElevatedButton.icon(
-              onPressed: _openDoorLoading ? null : _openDoor,
-              icon: _openDoorLoading
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.lock_open),
-              label: Text(_openDoorLoading ? 'Открываю...' : 'Открыть дверь'),
+            Positioned.fill(
+              child: RtspPlayerWidget(key: _playerKey, rtspUrl: widget.streamUrl),
+            ),
+            AnimatedOpacity(
+              opacity: _controlsVisible ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 200),
+              child: SafeArea(
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.fullscreen_exit, color: Colors.white, size: 28),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    Expanded(
+                      child: Text(
+                        widget.deviceName,
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        _playerKey.currentState?.isMuted == true ? Icons.volume_off : Icons.volume_up,
+                        color: Colors.white,
+                      ),
+                      onPressed: () { _playerKey.currentState?.toggleMute(); setState(() {}); },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.camera_alt_outlined, color: Colors.white),
+                      onPressed: () => _playerKey.currentState?.takeSnapshot(context),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
