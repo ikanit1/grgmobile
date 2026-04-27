@@ -7,10 +7,6 @@ export const EVENT_TYPE_INCOMING_CALL = 'incoming_call';
 export const EVENT_TYPE_DOOR_OPEN = 'door_open';
 export const EVENT_TYPE_MISSED_CALL = 'missed_call';
 
-// Akuvox webhook events (from panel)
-export const EVENT_TYPE_AKUVOX_DOOR_OPEN = 'akuvox_door_open';
-export const EVENT_TYPE_AKUVOX_INCOMING_CALL = 'akuvox_incoming_call';
-export const EVENT_TYPE_AKUVOX_CALL_FINISHED = 'akuvox_call_finished';
 export const EVENT_TYPE_DEVICE_CONFIG_SYNCED = 'device_config_synced';
 
 // Authentication

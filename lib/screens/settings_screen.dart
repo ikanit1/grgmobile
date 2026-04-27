@@ -432,7 +432,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (!widget.backendMode) ...[
             const SizedBox(height: 16),
             const Text(
-              'ПОДКЛЮЧЕНИЕ К УСТРОЙСТВУ (Akuvox)',
+              'ПРЯМОЕ ПОДКЛЮЧЕНИЕ К УСТРОЙСТВУ',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12, letterSpacing: 0.4),
             ),
             const SizedBox(height: 10),

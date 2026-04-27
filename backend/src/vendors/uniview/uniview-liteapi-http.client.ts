@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { lastValueFrom } from 'rxjs';
 import { AxiosResponse } from 'axios';
-import { Device, DeviceType } from '../../devices/entities/device.entity';
+import { Device } from '../../devices/entities/device.entity';
 import { LiveUrlQueryDto } from '../../control/dto/live-url.dto';
 import { buildDigestHeader, parseWwwAuthenticate } from './digest-auth.helper';
 import { CredentialsService } from '../../credentials/credentials.service';
@@ -15,7 +15,7 @@ export class UniviewLiteapiHttpClient {
   constructor(
     private readonly http: HttpService,
     private readonly credentialsService: CredentialsService,
-  ) {}
+  ) { }
 
   private baseUrl(device: Device): string {
     return `http://${device.host}:${device.httpPort}/LAPI/V1.0`;
@@ -43,12 +43,13 @@ export class UniviewLiteapiHttpClient {
     const body = data ? JSON.stringify(data) : undefined;
     const { username, password } = this.getAuth(device);
 
-    let config: any = {
+    const config: any = {
       method,
       url,
       data: body,
       headers: { 'Content-Type': 'application/json' },
-      validateStatus: (s: number) => s < 500,
+      // Accept up to 599 — some Uniview NVRs return HTTP 599 for Basic auth instead of 401
+      validateStatus: (s: number) => s < 600,
     };
 
     if (username && password) {
@@ -58,26 +59,29 @@ export class UniviewLiteapiHttpClient {
 
     let res = await lastValueFrom(this.http.request(config)) as AxiosResponse;
 
-    if (res.status === 401 && username && password) {
-      const wwwAuth = res.headers?.['www-authenticate'] ?? res.headers?.['WWW-Authenticate'];
+    // Uniview NVR requires Digest auth. It may signal this via:
+    //   - HTTP 401 (standard)
+    //   - HTTP 599 (non-standard, seen on EVO NVR-508-64-E with Basic auth)
+    //   - HTTP 200 + ResponseCode != 0 (silently rejects Basic)
+    const responseCode = (res.data as any)?.Response?.ResponseCode;
+    const needsDigestRetry = username && password && (
+      res.status === 401 ||
+      res.status === 599 ||
+      (responseCode !== undefined && responseCode !== 0)
+    );
+    if (needsDigestRetry) {
+      let wwwAuth = res.headers?.['www-authenticate'] ?? res.headers?.['WWW-Authenticate'];
+      if (!wwwAuth) {
+        const probe = await lastValueFrom(
+          this.http.request({ method, url, validateStatus: () => true }),
+        ) as AxiosResponse;
+        wwwAuth = probe.headers?.['www-authenticate'] ?? probe.headers?.['WWW-Authenticate'];
+      }
       const challenge = typeof wwwAuth === 'string' ? parseWwwAuthenticate(wwwAuth) : null;
       if (challenge) {
-        const digestHeader = buildDigestHeader(
-          method,
-          uri,
-          username,
-          password,
-          challenge,
-          body,
-        );
-        config = {
-          method,
-          url,
-          data: body,
-          headers: { ...config.headers, Authorization: digestHeader },
-          validateStatus: (s: number) => s < 500,
-        };
-        res = await lastValueFrom(this.http.request(config)) as AxiosResponse;
+        const digestHeader = buildDigestHeader(method, uri, username, password, challenge, body);
+        const digestConfig = { method, url, data: body, headers: { 'Content-Type': 'application/json', Authorization: digestHeader }, validateStatus: (s: number) => s < 600 };
+        res = await lastValueFrom(this.http.request(digestConfig)) as AxiosResponse;
       }
     }
 
@@ -146,10 +150,16 @@ export class UniviewLiteapiHttpClient {
     }
   }
 
-  /** LiteAPI doc IPC 6.1.5 / NVR: System/Equipment — device info */
+  /** LiteAPI: device info. NVR uses /System/DeviceInfo; IPC uses /System/Equipment (fallback). */
   async getSystemInfo(device: Device): Promise<Record<string, unknown>> {
+    // NVR has /System/DeviceInfo; IPC has /System/Equipment. Try DeviceInfo first.
+    try {
+      const data = await this.request(device, 'GET', '/System/DeviceInfo');
+      const d = data?.Response?.Data ?? data?.Data ?? data ?? {};
+      if ((d as any).DeviceModel || (d as any).SerialNumber) return d as Record<string, unknown>;
+    } catch { /* fallthrough */ }
     const data = await this.request(device, 'GET', '/System/Equipment');
-    return (data?.Data ?? data ?? {}) as Record<string, unknown>;
+    return (data?.Response?.Data ?? data?.Data ?? data ?? {}) as Record<string, unknown>;
   }
 
   /**
@@ -275,11 +285,11 @@ export class UniviewLiteapiHttpClient {
   async ptzMove(device: Device, channelId: number, direction: string, speed: number): Promise<void> {
     const ch = channelId ?? device.defaultChannel ?? 1;
     const dirMap: Record<string, { Pan: number; Tilt: number; Zoom: number }> = {
-      left:    { Pan: -speed, Tilt: 0, Zoom: 0 },
-      right:   { Pan: speed,  Tilt: 0, Zoom: 0 },
-      up:      { Pan: 0, Tilt: speed,  Zoom: 0 },
-      down:    { Pan: 0, Tilt: -speed, Zoom: 0 },
-      zoomin:  { Pan: 0, Tilt: 0, Zoom: speed },
+      left: { Pan: -speed, Tilt: 0, Zoom: 0 },
+      right: { Pan: speed, Tilt: 0, Zoom: 0 },
+      up: { Pan: 0, Tilt: speed, Zoom: 0 },
+      down: { Pan: 0, Tilt: -speed, Zoom: 0 },
+      zoomin: { Pan: 0, Tilt: 0, Zoom: speed },
       zoomout: { Pan: 0, Tilt: 0, Zoom: -speed },
     };
     const body = dirMap[direction] ?? { Pan: 0, Tilt: 0, Zoom: 0 };
@@ -324,7 +334,8 @@ export class UniviewLiteapiHttpClient {
       method: 'GET',
       url,
       responseType: 'arraybuffer',
-      validateStatus: (s: number) => s < 500,
+      // Accept up to 599 — some Uniview NVRs return HTTP 599 for Basic auth
+      validateStatus: (s: number) => s < 600,
       headers: {},
     };
     if (username && password) {
@@ -333,12 +344,20 @@ export class UniviewLiteapiHttpClient {
 
     let res = await lastValueFrom(this.http.request(config)) as AxiosResponse;
 
-    if (res.status === 401 && username && password) {
-      const wwwAuth = res.headers?.['www-authenticate'] ?? res.headers?.['WWW-Authenticate'];
+    const needsDigest = username && password && (res.status === 401 || res.status === 599);
+    if (needsDigest) {
+      let wwwAuth = res.headers?.['www-authenticate'] ?? res.headers?.['WWW-Authenticate'];
+      if (!wwwAuth) {
+        // Probe without auth to get the Digest challenge (NVR 599 doesn't include WWW-Authenticate)
+        const probe = await lastValueFrom(
+          this.http.request({ method: 'GET', url, validateStatus: () => true }),
+        ) as AxiosResponse;
+        wwwAuth = probe.headers?.['www-authenticate'] ?? probe.headers?.['WWW-Authenticate'];
+      }
       const challenge = typeof wwwAuth === 'string' ? parseWwwAuthenticate(wwwAuth) : null;
       if (challenge) {
         const digestHeader = buildDigestHeader('GET', uri, username, password, challenge, undefined);
-        config = { ...config, headers: { ...config.headers, Authorization: digestHeader } };
+        config = { ...config, headers: { ...config.headers, Authorization: digestHeader }, validateStatus: (s: number) => s < 600 };
         res = await lastValueFrom(this.http.request(config)) as AxiosResponse;
       }
     }
@@ -349,6 +368,74 @@ export class UniviewLiteapiHttpClient {
     }
     const buf = res.data as ArrayBuffer;
     return Buffer.from(buf);
+  }
+
+  /**
+   * Scan NVR channels and return active ones with their IP and model.
+   * First tries batch `/Channels/System/DeviceInfo`; if empty, probes channels 1..maxChannels one-by-one.
+   */
+  async scanNvrChannels(device: Device, maxChannels = 64): Promise<Array<{
+    channel: number;
+    ip: string;
+    port: number;
+    model: string;
+    loginName: string;
+  }>> {
+    const results: Array<{ channel: number; ip: string; port: number; model: string; loginName: string }> = [];
+
+    // Try batch endpoint first
+    try {
+      const batch = await this.request(device, 'GET', '/Channels/System/DeviceInfo');
+      const batchData = batch?.Response?.Data ?? batch?.Data ?? batch;
+      const list: any[] = batchData?.Channels ?? (Array.isArray(batchData) ? batchData : []);
+      if (list.length > 0) {
+        for (const ch of list) {
+          const idx = ch.ChannelIndex ?? ch.Index ?? ch.ID ?? ch.id;
+          if (!idx) continue;
+          results.push({
+            channel: Number(idx),
+            ip: ch.Address ?? ch.IP ?? '',
+            port: ch.Port ?? 80,
+            model: ch.DeviceModel ?? ch.Model ?? '',
+            loginName: ch.LoginName ?? ch.Username ?? '',
+          });
+        }
+        return results;
+      }
+    } catch { /* fallthrough to per-channel probe */ }
+
+    // Sequential per-channel scan (NVR can't handle many parallel auth sessions)
+    let emptyStreak = 0;
+    for (let ch = 1; ch <= maxChannels; ch++) {
+      try {
+        const basic = await this.request(device, 'GET', `/Channels/${ch}/System/BasicInfo`);
+        const b = basic?.Response?.Data ?? basic?.Data ?? {};
+        if (!(b as any).Address) {
+          emptyStreak++;
+          if (emptyStreak >= 3) break; // 3 consecutive empty channels → stop
+          continue;
+        }
+        emptyStreak = 0;
+        let model = '';
+        try {
+          const devInfo = await this.request(device, 'GET', `/Channels/${ch}/System/DeviceInfo`);
+          const d = devInfo?.Response?.Data ?? devInfo?.Data ?? {};
+          model = (d as any).DeviceModel ?? (d as any).Model ?? '';
+        } catch { /* model unknown */ }
+        results.push({
+          channel: ch,
+          ip: (b as any).Address ?? '',
+          port: (b as any).Port ?? 80,
+          model,
+          loginName: (b as any).LoginName ?? '',
+        });
+      } catch (e: any) {
+        this.logger.debug(`scanNvrChannels ch${ch}: ${e?.message}`);
+        emptyStreak++;
+        if (emptyStreak >= 3) break;
+      }
+    }
+    return results;
   }
 }
 

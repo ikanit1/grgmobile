@@ -10,7 +10,6 @@ import { EventsModule } from '../events/events.module';
 import { AccessModule } from '../access/access.module';
 import { PushModule } from '../push/push.module';
 import { CredentialsModule } from '../credentials/credentials.module';
-import { AkuvoxClient } from '../vendors/akuvox/akuvox.client';
 import { UniviewLiteapiHttpClient } from '../vendors/uniview/uniview-liteapi-http.client';
 import { Go2rtcClient } from '../vendors/go2rtc/go2rtc.client';
 import { Device } from '../devices/entities/device.entity';
@@ -28,7 +27,7 @@ const HTTP_TIMEOUT_MS = 10000; // 10s — запрос через интерне
     TypeOrmModule.forFeature([Device]),
   ],
   controllers: [ControlController, EventsController],
-  providers: [ControlService, AkuvoxClient, UniviewLiteapiHttpClient, Go2rtcClient, OpenDoorRateLimitGuard],
+  providers: [ControlService, UniviewLiteapiHttpClient, Go2rtcClient, OpenDoorRateLimitGuard],
 })
 export class ControlModule {}
 

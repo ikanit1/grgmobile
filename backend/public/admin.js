@@ -782,7 +782,7 @@
           let html = '<div class="card" style="margin-bottom:1rem;"><p class="meta" style="margin:0;"><strong>Uniview NVR:</strong> добавьте NVR как устройство с ролью NVR — кнопка «🔄 Камеры» синхронизирует подключённые к нему камеры. Вызывные панели — роль Домофон. Поле <strong>Этаж</strong>: пусто = видят все жители; число = только жители этого этажа.</p></div>';
           html += '<div id="devFiltersBar" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">' +
             '<input id="devSearch" placeholder="Поиск по имени, IP, ID..." style="min-width:220px;" value="' + esc(savedFilters.search || '') + '">' +
-            '<select id="devTypeFilter"><option value="">Все типы</option><option' + (savedFilters.type === 'UNIVIEW_IPC' ? ' selected' : '') + '>UNIVIEW_IPC</option><option' + (savedFilters.type === 'UNIVIEW_NVR' ? ' selected' : '') + '>UNIVIEW_NVR</option><option' + (savedFilters.type === 'AKUVOX' ? ' selected' : '') + '>AKUVOX</option><option' + (savedFilters.type === 'OTHER' ? ' selected' : '') + '>OTHER</option></select>' +
+            '<select id="devTypeFilter"><option value="">Все типы</option><option' + (savedFilters.type === 'UNIVIEW_IPC' ? ' selected' : '') + '>UNIVIEW_IPC</option><option' + (savedFilters.type === 'UNIVIEW_NVR' ? ' selected' : '') + '>UNIVIEW_NVR</option><option' + (savedFilters.type === 'OTHER' ? ' selected' : '') + '>OTHER</option></select>' +
             '<select id="devRoleFilter"><option value="">Все роли</option><option' + (savedFilters.role === 'DOORPHONE' ? ' selected' : '') + '>DOORPHONE</option><option' + (savedFilters.role === 'CAMERA' ? ' selected' : '') + '>CAMERA</option><option' + (savedFilters.role === 'NVR' ? ' selected' : '') + '>NVR</option></select>' +
             '<select id="devBuildingFilter">' + buildingFilterOpts + '</select>' +
             '<select id="devStatusFilter"><option value="">Все статусы</option><option value="online"' + (savedFilters.status === 'online' ? ' selected' : '') + '>Online</option><option value="offline"' + (savedFilters.status === 'offline' ? ' selected' : '') + '>Offline</option></select>' +
@@ -1427,7 +1427,7 @@
         '<label for="devBuildingId">Здание</label> <select id="devBuildingId">' + buildings.map(b => '<option value="' + b.id + '"' + (editDevice && b.id === editDevice.buildingId ? ' selected' : '') + '>' + esc(b.name || b.id) + '</option>').join('') + '</select> ' +
         '<input id="devName" placeholder="Имя" required value="' + esc(editDevice ? (editDevice.name || '') : '') + '"> ' +
         '<input id="devHost" placeholder="Host (IP)" required value="' + esc(editDevice ? (editDevice.host || '') : '') + '"> ' +
-        '<label for="devType">Тип</label> <select id="devType"><option value="AKUVOX"' + (editDevice && editDevice.type === 'AKUVOX' ? ' selected' : '') + '>Akuvox</option><option value="UNIVIEW_IPC"' + (editDevice && editDevice.type === 'UNIVIEW_IPC' ? ' selected' : '') + '>Uniview IPC</option><option value="UNIVIEW_NVR"' + (editDevice && editDevice.type === 'UNIVIEW_NVR' ? ' selected' : '') + '>Uniview NVR</option><option value="OTHER"' + (editDevice && editDevice.type === 'OTHER' ? ' selected' : '') + '>Other</option></select> ' +
+        '<label for="devType">Тип</label> <select id="devType"><option value="UNIVIEW_IPC"' + (editDevice && editDevice.type === 'UNIVIEW_IPC' ? ' selected' : '') + '>Uniview IPC</option><option value="UNIVIEW_NVR"' + (editDevice && editDevice.type === 'UNIVIEW_NVR' ? ' selected' : '') + '>Uniview NVR</option><option value="OTHER"' + (editDevice && editDevice.type === 'OTHER' ? ' selected' : '') + '>Other</option></select> ' +
         '<label for="devRole">Роль</label> <select id="devRole"><option value="DOORPHONE"' + (editDevice && editDevice.role === 'DOORPHONE' ? ' selected' : '') + '>Домофон</option><option value="CAMERA"' + (editDevice && editDevice.role === 'CAMERA' ? ' selected' : '') + '>Камера</option><option value="NVR"' + (editDevice && editDevice.role === 'NVR' ? ' selected' : '') + '>NVR</option></select> ' +
         '<input id="devUser" placeholder="Логин" value="' + esc(editDevice && editDevice.username ? String(editDevice.username) : '') + '"> ' +
         '<input id="devPass" type="password" placeholder="' + (editDevice ? 'Новый пароль (оставьте пустым чтобы не менять)' : 'Пароль') + '"> ' +
@@ -1497,7 +1497,7 @@
             const n = (d.name || d.xAddr || '').toLowerCase();
             if (n.includes('nvr') || n.includes('recorder')) return { type: 'UNIVIEW_NVR', role: 'NVR' };
             if (n.includes('ipc') || n.includes('camera') || n.includes('cam')) return { type: 'UNIVIEW_IPC', role: 'CAMERA' };
-            if (n.includes('akuvox') || n.includes('doorbell') || n.includes('door')) return { type: 'AKUVOX', role: 'DOORPHONE' };
+            if (n.includes('doorbell') || n.includes('door')) return { type: 'UNIVIEW_IPC', role: 'DOORPHONE' };
             return { type: 'UNIVIEW_IPC', role: 'CAMERA' };
           }
           let rows = '<div style="margin-top:8px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">' +

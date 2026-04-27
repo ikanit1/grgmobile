@@ -8,7 +8,6 @@ import { LiveUrlQueryDto } from './dto/live-url.dto';
 import { EventsQueryDto } from './dto/events-query.dto';
 import { DeviceEventDto } from './dto/device-event.dto';
 import { TestConnectionDto } from './dto/test-connection.dto';
-import { AddAkuvoxUserDto } from './dto/add-akuvox-user.dto';
 import { RequestUser } from '../auth/request-user.interface';
 import { RecordingsQueryDto } from './dto/recordings-query.dto';
 import { PtzMoveDto } from './dto/ptz-move.dto';
@@ -67,54 +66,6 @@ export class ControlController {
     @Req() req: { user: RequestUser },
   ) {
     return this.controlService.postDeviceEvent(Number(id), dto, req.user);
-  }
-
-  // ————— Akuvox proxy (TZ: /control/akuvox/:deviceId/...) — same device ID, under /api/devices for consistency —————
-
-  @Post(':id/dial')
-  async dial(@Param('id') id: string, @Req() req: { user: RequestUser }) {
-    return this.controlService.dial(Number(id), req.user);
-  }
-
-  @Post(':id/hangup')
-  async hangup(@Param('id') id: string, @Req() req: { user: RequestUser }) {
-    return this.controlService.hangup(Number(id), req.user);
-  }
-
-  @Get(':id/relay')
-  async getRelayList(@Param('id') id: string, @Req() req: { user: RequestUser }) {
-    return this.controlService.getRelayList(Number(id), req.user);
-  }
-
-  @Post(':id/relay/:relayId/trig')
-  @UseGuards(OpenDoorRateLimitGuard)
-  async relayTrig(@Param('id') id: string, @Param('relayId') relayId: string, @Req() req: { user: RequestUser }) {
-    return this.controlService.relayTrig(Number(id), Number(relayId), req.user);
-  }
-
-  @Get(':id/calllog')
-  async getCallLog(@Param('id') id: string, @Req() req: { user: RequestUser }) {
-    return this.controlService.getCallLog(Number(id), req.user);
-  }
-
-  @Get(':id/users')
-  async getUserList(@Param('id') id: string, @Req() req: { user: RequestUser }) {
-    return this.controlService.getUserList(Number(id), req.user);
-  }
-
-  @Post(':id/users')
-  async addUser(@Param('id') id: string, @Body() dto: AddAkuvoxUserDto, @Req() req: { user: RequestUser }) {
-    return this.controlService.addUser(Number(id), dto.items, req.user);
-  }
-
-  @Get(':id/contacts')
-  async getContacts(@Param('id') id: string, @Req() req: { user: RequestUser }) {
-    return this.controlService.getContacts(Number(id), req.user);
-  }
-
-  @Get(':id/status')
-  async getAkuvoxStatus(@Param('id') id: string, @Req() req: { user: RequestUser }) {
-    return this.controlService.getAkuvoxStatus(Number(id), req.user);
   }
 
   // ————— Uniview proxy —————

@@ -1,6 +1,5 @@
-import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { DevicesService } from './devices.service';
-import { AkuvoxProvisioningService } from './akuvox-provisioning.service';
 import { EventLogService } from '../events/event-log.service';
 import { BuildingsService } from '../buildings/buildings.service';
 import { AccessService } from '../access/access.service';
@@ -8,19 +7,19 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RequestUser } from '../auth/request-user.interface';
 import { UserRole } from '../users/entities/user.entity';
 import { UpdateDeviceDto } from './dto/update-device.dto';
-import { SyncConfigDto } from './dto/sync-config.dto';
 import { EVENT_TYPE_DEVICE_UPDATED, EVENT_TYPE_DEVICE_DELETED } from '../events/event-types';
 import { sanitizeLogData } from '../common/logging/sanitizer';
+import { UniviewLiteapiHttpClient } from '../vendors/uniview/uniview-liteapi-http.client';
 
 @UseGuards(JwtAuthGuard)
 @Controller('devices')
 export class DevicesController {
   constructor(
     private readonly devicesService: DevicesService,
-    private readonly akuvoxProvisioning: AkuvoxProvisioningService,
     private readonly eventLogService: EventLogService,
     private readonly buildingsService: BuildingsService,
     private readonly accessService: AccessService,
+    private readonly univiewClient: UniviewLiteapiHttpClient,
   ) {}
 
   @Get(':id')
@@ -28,23 +27,10 @@ export class DevicesController {
     return this.devicesService.findByIdForUser(Number(id), req.user);
   }
 
-  @Get(':id/provision-config')
-  async getProvisionConfig(@Param('id') id: string, @Req() req: { user: RequestUser }) {
-    await this.devicesService.findByIdForUser(Number(id), req.user);
-    return this.akuvoxProvisioning.getProvisionConfig(Number(id), req.user);
-  }
-
-  @Post('sync-config')
-  async syncConfig(@Body() dto: SyncConfigDto, @Req() req: { user: RequestUser }) {
-    const allowed = [UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN, UserRole.COMPLEX_MANAGER];
-    if (!allowed.includes(req.user.role)) {
-      throw new ForbiddenException('Только для администраторов');
-    }
-    for (const deviceId of dto.deviceIds) {
-      const dev = await this.devicesService.findById(deviceId).catch(() => null);
-      if (dev) await this.accessService.assertCanAccessDevice(req.user, dev.buildingId);
-    }
-    return this.akuvoxProvisioning.syncConfigForDevices(dto.deviceIds, req.user);
+  @Post(':id/scan-channels')
+  async scanChannels(@Param('id') id: string, @Req() req: { user: RequestUser }) {
+    const device = await this.devicesService.findByIdForUser(Number(id), req.user);
+    return this.univiewClient.scanNvrChannels(device);
   }
 
   @Patch(':id')

@@ -92,19 +92,6 @@ class BackendClient {
     );
   }
 
-  Future<http.Response> _put(
-    String path, {
-    Map<String, dynamic>? body,
-    bool withAuth = true,
-  }) async {
-    final uri = Uri.parse('$baseUrl$path');
-    return http.put(
-      uri,
-      headers: await _headers(withAuth: withAuth),
-      body: body != null ? jsonEncode(body) : null,
-    );
-  }
-
   Future<http.Response> _delete(String path, {bool withAuth = true, Map<String, dynamic>? body}) async {
     final uri = Uri.parse('$baseUrl$path');
     if (body != null && body.isNotEmpty) {
@@ -164,14 +151,6 @@ class BackendClient {
     var res = await _patch(path, body: body);
     if (res.statusCode == 401 && await _tryRefresh()) {
       res = await _patch(path, body: body);
-    }
-    return res;
-  }
-
-  Future<http.Response> _putWithRetry(String path, {Map<String, dynamic>? body}) async {
-    var res = await _put(path, body: body);
-    if (res.statusCode == 401 && await _tryRefresh()) {
-      res = await _put(path, body: body);
     }
     return res;
   }
@@ -432,79 +411,6 @@ class BackendClient {
     if (res.statusCode != 200) throw BackendException(_errorMessage(res), res.statusCode);
     final data = jsonDecode(res.body) as Map<String, dynamic>;
     return data['count'] as int? ?? 0;
-  }
-
-  /// Akuvox device status (system + sip). GET /devices/:id/status. Returns 400 for non-Akuvox.
-  Future<Map<String, dynamic>?> getDeviceStatus(int deviceId) async {
-    final res = await _getWithRetry('devices/$deviceId/status');
-    if (res.statusCode == 400) return null;
-    if (res.statusCode != 200) return null;
-    return jsonDecode(res.body) as Map<String, dynamic>?;
-  }
-
-  // --- Panel residents (Akuvox) ---
-
-  Future<PanelResidentsResponse> getResidents(int deviceId, {int page = 1, int limit = 50, String? search, String? syncStatus}) async {
-    var path = 'devices/$deviceId/residents?page=$page&limit=$limit';
-    if (search != null && search.isNotEmpty) path += '&search=${Uri.encodeComponent(search)}';
-    if (syncStatus != null && syncStatus.isNotEmpty) path += '&syncStatus=${Uri.encodeComponent(syncStatus)}';
-    final res = await _getWithRetry(path);
-    if (res.statusCode != 200) throw BackendException(_errorMessage(res), res.statusCode);
-    return PanelResidentsResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
-  }
-
-  Future<PanelResident> createResident(int deviceId, CreatePanelResidentDto dto) async {
-    final res = await _postWithRetry('devices/$deviceId/residents', body: dto.toJson());
-    if (res.statusCode != 200 && res.statusCode != 201) throw BackendException(_errorMessage(res), res.statusCode);
-    return PanelResident.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
-  }
-
-  Future<PanelResident> updateResident(int deviceId, String panelUserId, Map<String, dynamic> dto) async {
-    final res = await _putWithRetry('devices/$deviceId/residents/${Uri.encodeComponent(panelUserId)}', body: dto);
-    if (res.statusCode != 200) throw BackendException(_errorMessage(res), res.statusCode);
-    return PanelResident.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
-  }
-
-  Future<void> deleteResident(int deviceId, String panelUserId) async {
-    final res = await _deleteWithRetry('devices/$deviceId/residents/${Uri.encodeComponent(panelUserId)}');
-    if (res.statusCode != 200 && res.statusCode != 204) throw BackendException(_errorMessage(res), res.statusCode);
-  }
-
-  Future<Map<String, dynamic>> syncResidents(int deviceId) async {
-    final res = await _postWithRetry('devices/$deviceId/residents/sync', body: {});
-    if (res.statusCode != 200 && res.statusCode != 201) throw BackendException(_errorMessage(res), res.statusCode);
-    return jsonDecode(res.body) as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>> importResidentsFromApartments(int deviceId) async {
-    final res = await _postWithRetry('devices/$deviceId/residents/import-from-apartments', body: {});
-    if (res.statusCode != 200 && res.statusCode != 201) throw BackendException(_errorMessage(res), res.statusCode);
-    return jsonDecode(res.body) as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>> bulkImportResidents(int deviceId, List<CreatePanelResidentDto> residents) async {
-    final res = await _postWithRetry('devices/$deviceId/residents/bulk', body: {'residents': residents.map((e) => e.toJson()).toList()});
-    if (res.statusCode != 200 && res.statusCode != 201) throw BackendException(_errorMessage(res), res.statusCode);
-    return jsonDecode(res.body) as Map<String, dynamic>;
-  }
-
-  Future<void> bulkDeleteResidents(int deviceId, List<String> panelUserIds) async {
-    final res = await _deleteWithRetry('devices/$deviceId/residents/bulk', body: {'panelUserIds': panelUserIds});
-    if (res.statusCode != 200 && res.statusCode != 204) {
-      final body = res.body.isNotEmpty ? jsonDecode(res.body) : null;
-      throw BackendException(body is Map ? (body['message'] as String? ?? res.body) : res.body, res.statusCode);
-    }
-  }
-
-  Future<ResidentsSyncStatus> getResidentsSyncStatus(int deviceId) async {
-    final res = await _getWithRetry('devices/$deviceId/residents/sync-status');
-    if (res.statusCode != 200) throw BackendException(_errorMessage(res), res.statusCode);
-    return ResidentsSyncStatus.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
-  }
-
-  Future<void> clearAllResidents(int deviceId) async {
-    final res = await _postWithRetry('devices/$deviceId/residents/clear', body: {});
-    if (res.statusCode != 200 && res.statusCode != 201) throw BackendException(_errorMessage(res), res.statusCode);
   }
 
   // --- Device CRUD ---
@@ -887,110 +793,3 @@ class MyApartmentDto {
       );
 }
 
-// --- Panel residents (Akuvox) ---
-
-class PanelResident {
-  final String id;
-  final String panelUserId;
-  final String name;
-  final int? apartmentId;
-  final String? webRelay;
-  final String? liftFloorNum;
-  final String syncStatus;
-  final String? syncError;
-  final String? syncedAt;
-  final String? createdAt;
-  final String? updatedAt;
-
-  PanelResident({
-    required this.id,
-    required this.panelUserId,
-    required this.name,
-    this.apartmentId,
-    this.webRelay,
-    this.liftFloorNum,
-    required this.syncStatus,
-    this.syncError,
-    this.syncedAt,
-    this.createdAt,
-    this.updatedAt,
-  });
-
-  factory PanelResident.fromJson(Map<String, dynamic> json) => PanelResident(
-        id: json['id'] as String? ?? '',
-        panelUserId: json['panelUserId'] as String? ?? '',
-        name: json['name'] as String? ?? '',
-        apartmentId: json['apartmentId'] as int?,
-        webRelay: json['webRelay'] as String?,
-        liftFloorNum: json['liftFloorNum'] as String?,
-        syncStatus: json['syncStatus'] as String? ?? 'synced',
-        syncError: json['syncError'] as String?,
-        syncedAt: json['syncedAt'] as String?,
-        createdAt: json['createdAt'] as String?,
-        updatedAt: json['updatedAt'] as String?,
-      );
-}
-
-class PanelResidentsResponse {
-  final List<PanelResident> items;
-  final int total;
-  final int page;
-  final int limit;
-
-  PanelResidentsResponse({required this.items, required this.total, required this.page, required this.limit});
-
-  factory PanelResidentsResponse.fromJson(Map<String, dynamic> json) {
-    final list = json['items'] as List<dynamic>? ?? [];
-    return PanelResidentsResponse(
-      items: list.map((e) => PanelResident.fromJson(e as Map<String, dynamic>)).toList(),
-      total: json['total'] as int? ?? 0,
-      page: json['page'] as int? ?? 1,
-      limit: json['limit'] as int? ?? 50,
-    );
-  }
-}
-
-class CreatePanelResidentDto {
-  final String panelUserId;
-  final String name;
-  final int? apartmentId;
-  final String? webRelay;
-  final String? liftFloorNum;
-  final Map<String, dynamic>? scheduleRelay;
-
-  CreatePanelResidentDto({
-    required this.panelUserId,
-    required this.name,
-    this.apartmentId,
-    this.webRelay,
-    this.liftFloorNum,
-    this.scheduleRelay,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'panelUserId': panelUserId,
-        'name': name,
-        if (apartmentId != null) 'apartmentId': apartmentId,
-        if (webRelay != null) 'webRelay': webRelay,
-        if (liftFloorNum != null) 'liftFloorNum': liftFloorNum,
-        if (scheduleRelay != null) 'scheduleRelay': scheduleRelay,
-      };
-}
-
-class ResidentsSyncStatus {
-  final int total;
-  final int synced;
-  final int pending;
-  final int errors;
-  final String? lastSyncedAt;
-
-  ResidentsSyncStatus({required this.total, required this.synced, required this.pending, required this.errors, this.lastSyncedAt});
-
-  factory ResidentsSyncStatus.fromJson(Map<String, dynamic> json) => ResidentsSyncStatus(
-        total: json['total'] as int? ?? 0,
-        synced: json['synced'] as int? ?? 0,
-        pending: json['pending'] as int? ?? 0,
-        errors: json['errors'] as int? ?? 0,
-        lastSyncedAt: json['lastSyncedAt'] as String?,
-      );
-}

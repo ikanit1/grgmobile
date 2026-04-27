@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import '../api/backend_client.dart';
 import 'device_events_screen.dart';
 import 'live_view_screen.dart';
-import 'panel_residents_screen.dart';
-import 'device_panel_settings_screen.dart';
 import 'playback_screen.dart';
 
 class DeviceInfoBackendScreen extends StatefulWidget {
@@ -38,49 +36,12 @@ class _DeviceInfoBackendScreenState extends State<DeviceInfoBackendScreen> {
     }
   }
 
-  void _openPanelResidents() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PanelResidentsScreen(
-          client: widget.client,
-          deviceId: widget.deviceId,
-          deviceName: widget.deviceName,
-        ),
-      ),
-    );
-  }
-
-  void _openPanelSettings() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DevicePanelSettingsScreen(
-          client: widget.client,
-          deviceId: widget.deviceId,
-          deviceName: widget.deviceName,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('Инфо: ${widget.deviceName}'),
-        actions: [
-          TextButton.icon(
-            onPressed: _openPanelResidents,
-            icon: const Icon(Icons.people_outline, size: 20),
-            label: const Text('Жители панели'),
-          ),
-          TextButton.icon(
-            onPressed: _openPanelSettings,
-            icon: const Icon(Icons.settings, size: 20),
-            label: const Text('Настройки панели'),
-          ),
-        ],
+        actions: const [],
       ),
       body: Column(
         children: [

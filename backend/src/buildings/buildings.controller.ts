@@ -24,8 +24,6 @@ import { CreateDeviceDto } from './dto/create-device.dto';
 import { CreateBuildingDto } from './dto/create-building.dto';
 import { UpdateBuildingDto } from './dto/update-building.dto';
 import { BulkCreateApartmentsDto } from './dto/bulk-create-apartments.dto';
-import { AkuvoxProvisioningService } from '../devices/akuvox-provisioning.service';
-
 @UseGuards(JwtAuthGuard)
 @Controller('buildings')
 export class BuildingsController {
@@ -34,7 +32,6 @@ export class BuildingsController {
     private readonly apartmentsService: ApartmentsService,
     private readonly apartmentsImportService: ApartmentsImportService,
     private readonly residentsImportService: ResidentsImportService,
-    private readonly akuvoxProvisioning: AkuvoxProvisioningService,
   ) {}
 
   @Get()
@@ -99,9 +96,7 @@ export class BuildingsController {
     @Req() req: { user: RequestUser },
   ) {
     const buildingId = Number(id);
-    const result = await this.apartmentsService.createBulk(buildingId, dto.from, dto.to, req.user);
-    this.akuvoxProvisioning.syncConfigForBuilding(buildingId).catch(() => {});
-    return result;
+    return this.apartmentsService.createBulk(buildingId, dto.from, dto.to, req.user);
   }
 
   @Post(':id/apartments/import')
@@ -125,7 +120,6 @@ export class BuildingsController {
     } else {
       throw new BadRequestException('Загрузите файл (CSV/Excel) или передайте JSON с массивом "apartments"');
     }
-    this.akuvoxProvisioning.syncConfigForBuilding(buildingId).catch(() => {});
     return result;
   }
 

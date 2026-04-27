@@ -6,11 +6,13 @@ export class TestConnectionDto {
   @IsNumber()
   deviceId?: number;
 
+  @IsOptional()
   @IsString()
-  host!: string;
+  host?: string;
 
+  @IsOptional()
   @IsEnum(DeviceType)
-  type!: DeviceType;
+  type?: DeviceType;
 
   @IsOptional()
   @IsString()

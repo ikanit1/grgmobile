@@ -1,7 +1,6 @@
 import { Body, Controller, UseGuards, Headers, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { WebhooksService } from './webhooks.service';
 import { IntercomEventDto } from './dto/intercom-event.dto';
-import { AkuvoxWebhookDto } from './dto/akuvox-webhook.dto';
 import { UniviewWebhookDto } from './dto/uniview-webhook.dto';
 import { WebhookRateLimitGuard } from './webhooks-rate-limit.guard';
 
@@ -22,15 +21,6 @@ export class WebhooksController {
   ) {
     this.webhooksService.validateSecret(secret);
     return this.webhooksService.handleIntercomEvent(dto);
-  }
-
-  @Post('akuvox')
-  @HttpCode(HttpStatus.OK)
-  async akuvoxEvent(
-    @Body() dto: AkuvoxWebhookDto,
-    @Headers('x-webhook-secret') secret?: string,
-  ) {
-    return this.webhooksService.handleAkuvoxEvent(dto, secret);
   }
 
   @Post('uniview')

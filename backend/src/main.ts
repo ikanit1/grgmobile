@@ -67,7 +67,7 @@ async function bootstrap() {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Doorphone API')
-    .setDescription('API управления домофонами (мультитенант, Akuvox, Uniview LiteAPI)')
+    .setDescription('API управления домофонами (мультитенант, Uniview LiteAPI)')
     .setVersion('1.0')
     .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'JWT')
     .addTag('auth', 'Авторизация')

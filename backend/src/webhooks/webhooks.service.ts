@@ -5,22 +5,14 @@ import { IncomingCallService } from '../events/incoming-call.service';
 import { EventLogService } from '../events/event-log.service';
 import {
   EVENT_TYPE_INCOMING_CALL,
-  EVENT_TYPE_AKUVOX_DOOR_OPEN,
-  EVENT_TYPE_AKUVOX_INCOMING_CALL,
-  EVENT_TYPE_AKUVOX_CALL_FINISHED,
   EVENT_TYPE_UNIVIEW_DOOR_OPEN,
   EVENT_TYPE_UNIVIEW_MOTION,
   EVENT_TYPE_UNIVIEW_ALARM,
   EVENT_TYPE_UNIVIEW_TAMPER,
 } from '../events/event-types';
 import { IntercomEventDto } from './dto/intercom-event.dto';
-import { AkuvoxWebhookDto } from './dto/akuvox-webhook.dto';
 import { UniviewWebhookDto } from './dto/uniview-webhook.dto';
 import { Device } from '../devices/entities/device.entity';
-
-function normalizeMac(mac: string): string {
-  return mac.replace(/[:-]/g, '').toUpperCase();
-}
 
 @Injectable()
 export class WebhooksService {
@@ -49,51 +41,6 @@ export class WebhooksService {
       apartmentId: dto.apartmentId,
       apartmentNumber: dto.apartmentNumber,
     });
-  }
-
-  async handleAkuvoxEvent(dto: AkuvoxWebhookDto, secret?: string): Promise<{ logId: number; pushSentTo?: string[] }> {
-    this.validateSecret(secret);
-    const macNorm = normalizeMac(dto.mac);
-    // Use query builder with normalized MAC comparison for performance
-    const device = await this.devicesRepo
-      .createQueryBuilder('device')
-      .where(
-        "LOWER(REPLACE(REPLACE(REPLACE(device.macAddress, ':', ''), '-', ''), ' ', '')) = :macNorm",
-        { macNorm: macNorm.toLowerCase() }
-      )
-      .leftJoinAndSelect('device.building', 'building')
-      .getOne();
-
-    if (!device) {
-      this.logger.warn(`Akuvox webhook: unknown MAC ${dto.mac}`);
-      throw new ForbiddenException('Устройство с таким MAC не зарегистрировано');
-    }
-    const deviceId = device.id;
-    const eventTypeMap: Record<string, string> = {
-      door_open: EVENT_TYPE_AKUVOX_DOOR_OPEN,
-      incoming_call: EVENT_TYPE_AKUVOX_INCOMING_CALL,
-      call_finished: EVENT_TYPE_AKUVOX_CALL_FINISHED,
-    };
-    const eventType = eventTypeMap[dto.eventType] ?? `akuvox_${dto.eventType}`;
-    const data: Record<string, unknown> = {
-      mac: dto.mac,
-      panelEventType: dto.eventType,
-      timestamp: dto.timestamp,
-      ...dto.payload,
-    };
-    const log = await this.eventLogService.create(deviceId, eventType, data);
-    this.logger.log(`Akuvox webhook: deviceId=${deviceId} eventType=${dto.eventType} logId=${log.id}`);
-
-    if (dto.eventType === 'incoming_call') {
-      const payload = dto.payload ?? {};
-      const result = await this.incomingCallService.handleDeviceEvent(deviceId, {
-        type: EVENT_TYPE_INCOMING_CALL,
-        apartmentId: typeof payload.apartmentId === 'number' ? payload.apartmentId : undefined,
-        apartmentNumber: typeof payload.apartmentNumber === 'string' ? payload.apartmentNumber : undefined,
-      });
-      return { logId: log.id, pushSentTo: result.pushSentTo };
-    }
-    return { logId: log.id };
   }
 
   async handleUniviewEvent(dto: UniviewWebhookDto, secret?: string): Promise<{ logId: number; pushSentTo?: string[] }> {

@@ -46,7 +46,7 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
   final _rtspPortCtrl = TextEditingController(text: '554');
   final _channelCtrl = TextEditingController();
   final _streamCtrl = TextEditingController();
-  String _type = 'AKUVOX';
+  String _type = 'UNIVIEW_IPC';
   String _role = 'DOORPHONE';
   bool _showAdvanced = false;
 
@@ -312,7 +312,6 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _buildTypeChip('AKUVOX', 'Akuvox', Icons.door_front_door),
               _buildTypeChip('UNIVIEW_IPC', 'Uniview IPC', Icons.videocam),
               _buildTypeChip('UNIVIEW_NVR', 'Uniview NVR', Icons.dns),
               _buildTypeChip('OTHER', 'Другое', Icons.device_unknown),

@@ -22,9 +22,7 @@ import { User } from './users/entities/user.entity';
 import { UserApartment } from './users/entities/user-apartment.entity';
 import { EventLog } from './events/entities/event-log.entity';
 import { ApartmentApplication } from './apartments/entities/apartment-application.entity';
-import { PanelResident } from './panel-residents/entities/panel-resident.entity';
 import { AdminModule } from './admin/admin.module';
-import { PanelResidentsModule } from './panel-residents/panel-residents.module';
 import { PushModule } from './push/push.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { HealthController } from './common/health.controller';
@@ -49,7 +47,6 @@ const typeOrmConfig = usePostgres
         UserApartment,
         EventLog,
         ApartmentApplication,
-        PanelResident,
       ],
       synchronize: process.env.NODE_ENV !== 'production',
     }
@@ -66,7 +63,6 @@ const typeOrmConfig = usePostgres
         UserApartment,
         EventLog,
         ApartmentApplication,
-        PanelResident,
       ],
       synchronize: process.env.NODE_ENV !== 'production',
     };
@@ -83,7 +79,6 @@ const typeOrmConfig = usePostgres
     UsersModule,
     HousesModule,
     DevicesModule,
-    PanelResidentsModule,
     ControlModule,
     DiscoveryModule,
     EventsModule,
