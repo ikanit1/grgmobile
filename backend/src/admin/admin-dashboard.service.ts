@@ -59,8 +59,8 @@ export class AdminDashboardService {
         this.orgsRepo.count(),
         this.complexesRepo.count(),
         this.buildingsRepo.count(),
-        this.devicesRepo.count(),
-        this.devicesRepo.count({ where: { status: 'online' } }),
+        this.devicesRepo.createQueryBuilder('d').where('d.nvr_id IS NULL').getCount(),
+        this.devicesRepo.createQueryBuilder('d').where('d.nvr_id IS NULL').andWhere('d.status = :s', { s: 'online' }).getCount(),
         this.countDistinctResidents(),
         this.applicationsRepo.count({ where: { status: ApplicationStatus.PENDING } }),
       ]);
@@ -81,10 +81,12 @@ export class AdminDashboardService {
       this.devicesRepo
         .createQueryBuilder('d')
         .where('d.building_id IN (:...ids)', { ids: buildingIds })
+        .andWhere('d.nvr_id IS NULL')
         .getCount(),
       this.devicesRepo
         .createQueryBuilder('d')
         .where('d.building_id IN (:...ids)', { ids: buildingIds })
+        .andWhere('d.nvr_id IS NULL')
         .andWhere('d.status = :status', { status: 'online' })
         .getCount(),
       this.userApartmentsRepo
