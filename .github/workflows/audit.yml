@@ -1,0 +1,61 @@
+name: Auto Audit (Push & PR)
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: GRG Mobile Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # ── Checkout with full history so git diff works ──────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── Resolve base SHA for diff ─────────────────────────────────────────
+      - name: Resolve diff range
+        id: diff
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+          echo "base_sha=$BASE" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD" >> "$GITHUB_OUTPUT"
+          echo "Base: $BASE  Head: $HEAD"
+
+      # ── Setup Node.js ─────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ── Run audit and send Telegram report ────────────────────────────────
+      - name: Run audit
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_EVENT_NAME:  ${{ github.event_name }}
+          GITHUB_REPOSITORY:  ${{ github.repository }}
+          GITHUB_REF_NAME:    ${{ github.ref_name }}
+          GITHUB_SHA:         ${{ github.sha }}
+          GITHUB_ACTOR:       ${{ github.actor }}
+          PR_TITLE:           ${{ github.event.pull_request.title }}
+          PR_NUMBER:          ${{ github.event.pull_request.number }}
+          BASE_SHA:           ${{ steps.diff.outputs.base_sha }}
+          HEAD_SHA:           ${{ steps.diff.outputs.head_sha }}
+        run: node .github/scripts/audit.js
