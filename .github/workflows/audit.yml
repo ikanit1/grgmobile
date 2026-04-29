@@ -1,0 +1,238 @@
+name: Auto Audit — GRG Mobile
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  audit:
+    name: Code Audit & Telegram Report
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── Detect which areas changed ──────────────────────────────────────────
+      - name: Detect changed files
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE=${{ github.event.pull_request.base.sha }}
+            HEAD=${{ github.event.pull_request.head.sha }}
+            FILES=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || echo "")
+          else
+            BASE=${{ github.event.before }}
+            HEAD=${{ github.sha }}
+            if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+              FILES=$(git diff-tree --no-commit-id -r --name-only "$HEAD" 2>/dev/null || echo "")
+            else
+              FILES=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || echo "")
+            fi
+          fi
+
+          BACKEND_CHANGED=false
+          FLUTTER_CHANGED=false
+          GO2RTC_CHANGED=false
+          MIGRATION_CHANGED=false
+
+          while IFS= read -r f; do
+            [[ "$f" == backend/* ]]               && BACKEND_CHANGED=true
+            [[ "$f" == lib/* || "$f" == android/* || "$f" == ios/* || "$f" == pubspec.yaml ]] && FLUTTER_CHANGED=true
+            [[ "$f" == backend/src/vendors/go2rtc/* || "$f" == backend/go2rtc.yaml ]] && GO2RTC_CHANGED=true
+            [[ "$f" == backend/src/*/entities/*.ts || "$f" == backend/scripts/*.sql || "$f" == backend/migrations/* ]] && MIGRATION_CHANGED=true
+          done <<< "$FILES"
+
+          echo "backend_changed=$BACKEND_CHANGED"     >> "$GITHUB_OUTPUT"
+          echo "flutter_changed=$FLUTTER_CHANGED"     >> "$GITHUB_OUTPUT"
+          echo "go2rtc_changed=$GO2RTC_CHANGED"       >> "$GITHUB_OUTPUT"
+          echo "migration_changed=$MIGRATION_CHANGED" >> "$GITHUB_OUTPUT"
+          printf 'changed_files<<EOF\n%s\nEOF\n' "$FILES" >> "$GITHUB_OUTPUT"
+
+      # ── Backend: TypeScript compile check ───────────────────────────────────
+      - name: Setup Node.js
+        if: steps.changes.outputs.backend_changed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Backend — install deps
+        if: steps.changes.outputs.backend_changed == 'true'
+        working-directory: backend
+        run: npm ci --prefer-offline
+        continue-on-error: true
+
+      - name: Backend — TypeScript compile check
+        if: steps.changes.outputs.backend_changed == 'true'
+        id: ts_check
+        working-directory: backend
+        run: npx tsc --noEmit 2>&1 | tee /tmp/ts_output.txt; exit ${PIPESTATUS[0]}
+        continue-on-error: true
+
+      - name: Read TS errors
+        if: steps.changes.outputs.backend_changed == 'true'
+        id: ts_errors
+        run: |
+          if [ -f /tmp/ts_output.txt ]; then
+            COUNT=$(grep -c 'error TS' /tmp/ts_output.txt 2>/dev/null || echo 0)
+            echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+            SAMPLE=$(grep 'error TS' /tmp/ts_output.txt | head -3 | tr '\n' ' ' || echo "")
+            echo "sample=$SAMPLE" >> "$GITHUB_OUTPUT"
+          else
+            echo "count=0" >> "$GITHUB_OUTPUT"
+          fi
+        continue-on-error: true
+
+      # ── Flutter analyze ──────────────────────────────────────────────────────
+      - name: Setup Flutter
+        if: steps.changes.outputs.flutter_changed == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 'stable'
+          cache: true
+
+      - name: Flutter — pub get
+        if: steps.changes.outputs.flutter_changed == 'true'
+        run: flutter pub get
+        continue-on-error: true
+
+      - name: Flutter — analyze
+        if: steps.changes.outputs.flutter_changed == 'true'
+        id: flutter_analyze
+        run: flutter analyze 2>&1 | tee /tmp/flutter_output.txt; exit ${PIPESTATUS[0]}
+        continue-on-error: true
+
+      - name: Read Flutter errors
+        if: steps.changes.outputs.flutter_changed == 'true'
+        id: flutter_errors
+        run: |
+          if [ -f /tmp/flutter_output.txt ]; then
+            COUNT=$(grep -c 'error •\|warning •' /tmp/flutter_output.txt 2>/dev/null || echo 0)
+            echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          else
+            echo "count=0" >> "$GITHUB_OUTPUT"
+          fi
+        continue-on-error: true
+
+      # ── go2rtc: error handling audit ─────────────────────────────────────────
+      - name: Audit go2rtc error handling
+        if: steps.changes.outputs.go2rtc_changed == 'true'
+        id: go2rtc_audit
+        run: |
+          ISSUES=""
+          CLIENT="backend/src/vendors/go2rtc/go2rtc.client.ts"
+          if [ -f "$CLIENT" ]; then
+            # Check for explicit timeout
+            if ! grep -qE 'timeout|AbortSignal|race\(' "$CLIENT"; then
+              ISSUES="⚠️ go2rtc.client: нет явного таймаута на HTTP-запросы"
+            fi
+          fi
+          echo "issues=$ISSUES" >> "$GITHUB_OUTPUT"
+        continue-on-error: true
+
+      # ── Migrations: entity vs migration consistency ───────────────────────────
+      - name: Check entity vs migration consistency
+        if: steps.changes.outputs.migration_changed == 'true'
+        id: migration_check
+        run: |
+          ISSUES=""
+          ENTITY_FILE="backend/src/devices/entities/device.entity.ts"
+          if [ -f "$ENTITY_FILE" ]; then
+            # Check for columns without FK decorator (self-ref nvrId pattern)
+            BARE_FK=$(grep -n 'nvr_id\|nvrId' "$ENTITY_FILE" | grep '@Column' || true)
+            if [ -n "$BARE_FK" ]; then
+              if ! grep -q '@ManyToOne.*Device\|JoinColumn.*nvr_id' "$ENTITY_FILE"; then
+                ISSUES="⚠️ device.entity: nvrId без @ManyToOne FK — нет ON DELETE SET NULL"
+              fi
+            fi
+          fi
+          # Check migrations folder exists
+          if [ ! -d "backend/migrations" ]; then
+            ISSUES="$ISSUES\n⚠️ Папка backend/migrations отсутствует — нет SQL-миграций для продакшна"
+          fi
+          printf 'issues<<EOF\n%s\nEOF\n' "$ISSUES" >> "$GITHUB_OUTPUT"
+        continue-on-error: true
+
+      # ── Build and send Telegram report ───────────────────────────────────────
+      - name: Build Telegram report
+        id: report
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message || github.event.pull_request.title || 'N/A' }}
+          ACTOR: ${{ github.actor }}
+          REF: ${{ github.ref_name }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          BACKEND: ${{ steps.changes.outputs.backend_changed }}
+          FLUTTER: ${{ steps.changes.outputs.flutter_changed }}
+          GO2RTC: ${{ steps.changes.outputs.go2rtc_changed }}
+          MIGRATION: ${{ steps.changes.outputs.migration_changed }}
+          TS_OUTCOME: ${{ steps.ts_check.outcome }}
+          TS_ERRORS: ${{ steps.ts_errors.outputs.count }}
+          FL_OUTCOME: ${{ steps.flutter_analyze.outcome }}
+          FL_ERRORS: ${{ steps.flutter_errors.outputs.count }}
+          GO2RTC_ISSUES: ${{ steps.go2rtc_audit.outputs.issues }}
+          MIGRATION_ISSUES: ${{ steps.migration_check.outputs.issues }}
+        run: |
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          FIRST_LINE=$(echo "$COMMIT_MSG" | head -1 | cut -c1-72)
+          DATE=$(date '+%Y-%m-%d %H:%M UTC')
+
+          AREAS=""
+          [ "$BACKEND"   = "true" ] && AREAS="${AREAS}🏗 Backend (NestJS)\n"
+          [ "$FLUTTER"   = "true" ] && AREAS="${AREAS}📱 Flutter\n"
+          [ "$GO2RTC"    = "true" ] && AREAS="${AREAS}📡 go2rtc\n"
+          [ "$MIGRATION" = "true" ] && AREAS="${AREAS}🗄 Entities/Migrations\n"
+          [ -z "$AREAS" ] && AREAS="(нет изменений в отслеживаемых областях)\n"
+
+          if [ "$BACKEND" = "true" ]; then
+            if [ "$TS_OUTCOME" = "success" ] || [ "$TS_ERRORS" = "0" ]; then
+              TS_STATUS="✅ TypeScript: OK"
+            else
+              TS_STATUS="❌ TypeScript: ${TS_ERRORS} ошибок"
+            fi
+          else
+            TS_STATUS="— TypeScript: не проверялся"
+          fi
+
+          if [ "$FLUTTER" = "true" ]; then
+            if [ "$FL_OUTCOME" = "success" ] || [ "$FL_ERRORS" = "0" ]; then
+              FL_STATUS="✅ Flutter analyze: OK"
+            else
+              FL_STATUS="⚠️ Flutter analyze: ${FL_ERRORS} предупреждений"
+            fi
+          else
+            FL_STATUS="— Flutter analyze: не проверялся"
+          fi
+
+          ISSUES=""
+          [ -n "$GO2RTC_ISSUES" ]    && ISSUES="${ISSUES}${GO2RTC_ISSUES}\n"
+          [ -n "$MIGRATION_ISSUES" ] && ISSUES="${ISSUES}${MIGRATION_ISSUES}\n"
+          [ -z "$ISSUES" ] && ISSUES="✅ Критических проблем не обнаружено"
+
+          MSG=$(printf '🔍 *GRG Mobile — Автоматический аудит*\n📅 %s\n\n📦 Repo: `%s`\n🌿 Ветка: `%s` (%s)\n👤 Автор: `%s`\n📝 `%s` — %s\n\n*Затронутые области:*\n%s\n*Проверки:*\n%s\n%s\n\n*Проблемы:*\n%s' \
+            "$DATE" "$REPO" "$REF" "$EVENT" "$ACTOR" "$SHORT_SHA" "$FIRST_LINE" \
+            "$(echo -e $AREAS)" "$TS_STATUS" "$FL_STATUS" "$(echo -e $ISSUES)")
+
+          printf 'message<<EOF\n%s\nEOF\n' "$MSG" >> "$GITHUB_OUTPUT"
+
+      - name: Send Telegram report
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MESSAGE: ${{ steps.report.outputs.message }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg chat_id "$CHAT_ID" \
+              --arg text "$MESSAGE" \
+              '{chat_id: $chat_id, text: $text, parse_mode: "Markdown", disable_web_page_preview: true}')" \
+            | jq -r '.ok // "false"'
