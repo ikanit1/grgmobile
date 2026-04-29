@@ -6,7 +6,6 @@ import 'package:grgmobileapp/screens/auth_screen.dart';
 import 'package:grgmobileapp/api/backend_client.dart';
 import 'package:grgmobileapp/api/auth_storage.dart';
 import 'package:grgmobileapp/models/api_config.dart';
-import 'package:grgmobileapp/models/auth_user.dart';
 
 void main() {
   testWidgets('App loads and shows MaterialApp', (WidgetTester tester) async {

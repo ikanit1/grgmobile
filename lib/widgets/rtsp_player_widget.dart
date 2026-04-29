@@ -43,7 +43,6 @@ class RtspPlayerWidgetState extends State<RtspPlayerWidget>
 
   static const _maxRetries = 3;
   static const _retryDelay = Duration(seconds: 3);
-  // go2rtc + FFmpeg может стартовать до 15 секунд при первом открытии
   static const _timeout = Duration(seconds: 18);
 
   @override
@@ -101,7 +100,6 @@ class RtspPlayerWidgetState extends State<RtspPlayerWidget>
 
     if (!kIsWeb && _player.platform is NativePlayer) {
       final native = _player.platform as NativePlayer;
-      // Low-latency profile — убирает буферизацию декодера и демаксера
       await native.setProperty('profile', 'low-latency');
       await native.setProperty('rtsp-transport', 'tcp');
       await native.setProperty('network-timeout', '10');
@@ -190,52 +188,54 @@ class RtspPlayerWidgetState extends State<RtspPlayerWidget>
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        if (_loading)
-          const Center(child: CircularProgressIndicator())
-        else if (_error != null)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.videocam_off, color: Colors.white38, size: 48),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Ошибка видеопотока',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _error!,
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
-                    textAlign: TextAlign.center,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 16),
-                  TextButton.icon(
-                    onPressed: () { _retryCount = 0; _openStream(); },
-                    icon: const Icon(Icons.refresh, color: Colors.white70),
-                    label: const Text('Повторить', style: TextStyle(color: Colors.white70)),
-                  ),
-                ],
+    return Container(
+      color: Colors.black,
+      child: Stack(
+        children: [
+          if (_loading)
+            const Center(child: CircularProgressIndicator())
+          else if (_error != null)
+            Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.videocam_off, color: Colors.white38, size: 32),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Ошибка видеопотока',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _error!,
+                      style: const TextStyle(color: Colors.white54, fontSize: 11),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: () { _retryCount = 0; _openStream(); },
+                      icon: const Icon(Icons.refresh, color: Colors.white70, size: 18),
+                      label: const Text('Повторить', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    ),
+                  ],
+                ),
               ),
+            )
+          else
+            InteractiveViewer(
+              transformationController: _transformController,
+              minScale: 1.0,
+              maxScale: 5.0,
+              child: Video(controller: _controller, fill: Colors.black),
             ),
-          )
-        else
-          // Pinch-to-zoom + pan
-          InteractiveViewer(
-            transformationController: _transformController,
-            minScale: 1.0,
-            maxScale: 5.0,
-            child: Video(controller: _controller, fill: Colors.black),
-          ),
-        if (widget.overlay != null) widget.overlay!,
-      ],
+          if (widget.overlay != null) widget.overlay!,
+        ],
+      ),
     );
   }
 }

@@ -54,8 +54,8 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
 
   void _scheduleHide() {
     _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _controlsVisible = false);
+    _hideTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted && _controlsVisible) setState(() => _controlsVisible = false);
     });
   }
 
@@ -145,89 +145,113 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _onTapVideo,
-        child: Stack(
-          children: [
-            // Video area
-            Positioned.fill(
-              child: _streamUrl != null
-                  ? RtspPlayerWidget(key: _playerKey, rtspUrl: _streamUrl!)
-                  : _error != null
-                      ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
-                      : const Center(child: CircularProgressIndicator()),
+      body: Stack(
+        children: [
+          // ── 1. Video fills entire body ──────────────────────────────
+          Positioned.fill(
+            child: _streamUrl != null
+                ? RtspPlayerWidget(key: _playerKey, rtspUrl: _streamUrl!)
+                : _error != null
+                    ? Center(child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(_error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
+                      ))
+                    : const Center(child: CircularProgressIndicator()),
+          ),
+
+          // ── 2. Transparent tap detector ON TOP of video but BEHIND controls ──
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _onTapVideo,
             ),
+          ),
 
-            // PTZ overlay
-            if (_showPtz && _ptzSupported)
-              Positioned(
-                left: 0, right: 0, bottom: 80,
-                child: _buildPtzControls(),
-              ),
-
-            // Top app bar (auto-hide)
-            AnimatedSlide(
+          // ── 3. Top gradient + controls ──────────────────────────────
+          Positioned(
+            top: 0, left: 0, right: 0,
+            child: AnimatedSlide(
               offset: _controlsVisible ? Offset.zero : const Offset(0, -1),
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
               child: _buildTopBar(),
             ),
+          ),
 
-            // Bottom bar (auto-hide)
+          // ── 4. PTZ pad ──────────────────────────────────────────────
+          if (_showPtz && _ptzSupported)
             Positioned(
-              left: 0, right: 0, bottom: 0,
-              child: AnimatedSlide(
-                offset: _controlsVisible ? Offset.zero : const Offset(0, 1),
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeInOut,
-                child: _buildBottomBar(),
+              left: 0, right: 0, bottom: 90,
+              child: IgnorePointer(
+                ignoring: !_controlsVisible,
+                child: AnimatedOpacity(
+                  opacity: _controlsVisible ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: _buildPtzControls(),
+                ),
               ),
             ),
-          ],
-        ),
+
+          // ── 5. Bottom gradient + open-door button ───────────────────
+          Positioned(
+            left: 0, right: 0, bottom: 0,
+            child: AnimatedSlide(
+              offset: _controlsVisible ? Offset.zero : const Offset(0, 1),
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              child: _buildBottomBar(),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildTopBar() {
     final isMuted = _playerKey.currentState?.isMuted == true;
-    return SafeArea(
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          Expanded(
-            child: Text(
-              widget.deviceName,
-              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (_ptzSupported)
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.black87, Colors.transparent],
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Row(
+          children: [
             IconButton(
-              icon: Icon(_showPtz ? Icons.gamepad : Icons.gamepad_outlined, color: Colors.white),
-              onPressed: () => setState(() => _showPtz = !_showPtz),
-              tooltip: 'PTZ',
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
             ),
-          IconButton(
-            icon: Icon(isMuted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
-            onPressed: () { _playerKey.currentState?.toggleMute(); setState(() {}); },
-            tooltip: 'Звук',
-          ),
-          IconButton(
-            icon: const Icon(Icons.camera_alt_outlined, color: Colors.white),
-            onPressed: () => _playerKey.currentState?.takeSnapshot(context),
-            tooltip: 'Снимок',
-          ),
-          IconButton(
-            icon: const Icon(Icons.fullscreen, color: Colors.white),
-            onPressed: _openFullscreen,
-            tooltip: 'Полный экран',
-          ),
-        ],
+            Expanded(
+              child: Text(
+                widget.deviceName,
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (_ptzSupported)
+              IconButton(
+                icon: Icon(_showPtz ? Icons.gamepad : Icons.gamepad_outlined, color: Colors.white),
+                onPressed: () { setState(() => _showPtz = !_showPtz); _scheduleHide(); },
+                tooltip: 'PTZ',
+              ),
+            IconButton(
+              icon: Icon(isMuted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
+              onPressed: () { _playerKey.currentState?.toggleMute(); setState(() {}); _scheduleHide(); },
+            ),
+            IconButton(
+              icon: const Icon(Icons.camera_alt_outlined, color: Colors.white),
+              onPressed: () { _playerKey.currentState?.takeSnapshot(context); _scheduleHide(); },
+            ),
+            IconButton(
+              icon: const Icon(Icons.fullscreen, color: Colors.white),
+              onPressed: _openFullscreen,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -285,20 +309,22 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
         ),
       ),
       child: SafeArea(
+        top: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               ElevatedButton.icon(
                 onPressed: _openDoorLoading ? null : _openDoor,
                 icon: _openDoorLoading
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.lock_open),
                 label: Text(_openDoorLoading ? 'Открываю...' : 'Открыть дверь'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.purple,
                   foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 ),
               ),
             ],
@@ -309,7 +335,8 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
   }
 }
 
-// Fullscreen route — landscape + immersive mode
+// ── Fullscreen route ─────────────────────────────────────────────────────────
+
 class _FullscreenVideoPage extends StatefulWidget {
   final String streamUrl;
   final String deviceName;
@@ -346,7 +373,7 @@ class _FullscreenVideoPageState extends State<_FullscreenVideoPage> {
 
   void _scheduleHide() {
     _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(seconds: 3), () {
+    _hideTimer = Timer(const Duration(seconds: 4), () {
       if (mounted) setState(() => _controlsVisible = false);
     });
   }
@@ -360,48 +387,63 @@ class _FullscreenVideoPageState extends State<_FullscreenVideoPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _onTap,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: RtspPlayerWidget(key: _playerKey, rtspUrl: widget.streamUrl),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: RtspPlayerWidget(key: _playerKey, rtspUrl: widget.streamUrl),
+          ),
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _onTap,
             ),
-            AnimatedOpacity(
-              opacity: _controlsVisible ? 1.0 : 0.0,
+          ),
+          Positioned(
+            top: 0, left: 0, right: 0,
+            child: AnimatedSlide(
+              offset: _controlsVisible ? Offset.zero : const Offset(0, -1),
               duration: const Duration(milliseconds: 200),
-              child: SafeArea(
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.fullscreen_exit, color: Colors.white, size: 28),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                    Expanded(
-                      child: Text(
-                        widget.deviceName,
-                        style: const TextStyle(color: Colors.white, fontSize: 16),
-                        overflow: TextOverflow.ellipsis,
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.black87, Colors.transparent],
+                  ),
+                ),
+                child: SafeArea(
+                  bottom: false,
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.fullscreen_exit, color: Colors.white, size: 28),
+                        onPressed: () => Navigator.of(context).pop(),
                       ),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        _playerKey.currentState?.isMuted == true ? Icons.volume_off : Icons.volume_up,
-                        color: Colors.white,
+                      Expanded(
+                        child: Text(
+                          widget.deviceName,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      onPressed: () { _playerKey.currentState?.toggleMute(); setState(() {}); },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.camera_alt_outlined, color: Colors.white),
-                      onPressed: () => _playerKey.currentState?.takeSnapshot(context),
-                    ),
-                  ],
+                      IconButton(
+                        icon: Icon(
+                          _playerKey.currentState?.isMuted == true ? Icons.volume_off : Icons.volume_up,
+                          color: Colors.white,
+                        ),
+                        onPressed: () { _playerKey.currentState?.toggleMute(); setState(() {}); _scheduleHide(); },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.camera_alt_outlined, color: Colors.white),
+                        onPressed: () { _playerKey.currentState?.takeSnapshot(context); _scheduleHide(); },
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
