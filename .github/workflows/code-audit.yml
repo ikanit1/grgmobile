@@ -1,0 +1,42 @@
+name: Code Audit → Telegram
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - "**"
+
+jobs:
+  audit:
+    name: Audit changes & notify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0           # full history needed for git diff
+
+      - name: Fetch base branch (PR only)
+        if: github.event_name == 'pull_request'
+        run: git fetch origin ${{ github.base_ref }} --depth=50
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run code audit
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_EVENT_NAME:  ${{ github.event_name }}
+          GITHUB_REF:         ${{ github.ref }}
+          GITHUB_SHA:         ${{ github.sha }}
+          GITHUB_ACTOR:       ${{ github.actor }}
+          GITHUB_REPOSITORY:  ${{ github.repository }}
+          GITHUB_BASE_REF:    ${{ github.base_ref }}
+        run: python scripts/audit_changes.py
