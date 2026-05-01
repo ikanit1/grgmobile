@@ -1,0 +1,78 @@
+name: GRG Mobile — Repository Audit
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  audit:
+    name: Audit & Telegram Notify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      # ── 2. Collect changed files ───────────────────────────────
+      - name: Collect changed files
+        id: files
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.sha }}"
+            FILES=$(git diff --name-only "$BASE" "$HEAD" | tr '\n' ',' | sed 's/,$//')
+          else
+            FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | tr '\n' ',' | sed 's/,$//' || \
+                    git show --name-only --format="" HEAD | tr '\n' ',' | sed 's/,$//')
+          fi
+          echo "changed=${FILES}" >> "$GITHUB_OUTPUT"
+          echo "Changed files: $FILES"
+
+      # ── 3. Run audit script ────────────────────────────────────
+      - name: Run audit
+        id: audit
+        env:
+          CHANGED_FILES: ${{ steps.files.outputs.changed }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          chmod +x .github/scripts/audit.sh
+          REPORT=$(.github/scripts/audit.sh 2>&1)
+          echo "REPORT<<AUDIT_EOF" >> "$GITHUB_OUTPUT"
+          echo "$REPORT" >> "$GITHUB_OUTPUT"
+          echo "AUDIT_EOF" >> "$GITHUB_OUTPUT"
+          echo "--- Audit output ---"
+          echo "$REPORT"
+
+      # ── 4. Send report to Telegram ─────────────────────────────
+      - name: Send to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: "8578442151:AAGyycIa1TyBCrMp78QLNS2GCscB8Kph6Rc"
+          TELEGRAM_CHAT_ID: "947126451"
+        run: |
+          REPORT='${{ steps.audit.outputs.REPORT }}'
+
+          # Обрезаем до 4000 символов (лимит Telegram)
+          if [ ${#REPORT} -gt 4000 ]; then
+            REPORT="${REPORT:0:3950}"$'\n\n<i>... отчёт обрезан (превышен лимит)</i>'
+          fi
+
+          HTTP_CODE=$(curl -s -o /tmp/tg_response.json -w "%{http_code}" \
+            -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${REPORT}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "disable_web_page_preview=true")
+
+          echo "Telegram API response code: $HTTP_CODE"
+          cat /tmp/tg_response.json
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::warning::Telegram notification failed with HTTP $HTTP_CODE"
+          fi
