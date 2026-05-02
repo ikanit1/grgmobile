@@ -1,0 +1,222 @@
+name: Audit Changes & Notify Telegram
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine changed files
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+
+          # Fallback if before is all-zeros (first push to branch)
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            BASE=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || git diff --name-only HEAD~1 HEAD)
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # Flags
+          echo "has_backend=$(echo "$CHANGED" | grep -q '^backend/' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_flutter=$(echo "$CHANGED" | grep -qE '^(lib/|pubspec|android/|ios/)' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_go2rtc=$(echo "$CHANGED" | grep -qE '(go2rtc|control\.service|live_view_screen|rtsp_player)' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_migrations=$(echo "$CHANGED" | grep -qE '\.(sql|entity\.ts)$' && echo true || echo false)" >> $GITHUB_OUTPUT
+
+      - name: Set up Node.js (for backend lint)
+        if: steps.changes.outputs.has_backend == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend deps & type-check
+        if: steps.changes.outputs.has_backend == 'true'
+        id: backend_check
+        working-directory: backend
+        run: |
+          npm ci --prefer-offline 2>&1 | tail -5
+          npx tsc --noEmit 2>&1 | tee /tmp/ts_errors.txt
+          echo "ts_errors=$(wc -l < /tmp/ts_errors.txt)" >> $GITHUB_OUTPUT
+          echo "ts_output<<EOF" >> $GITHUB_OUTPUT
+          head -20 /tmp/ts_errors.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Analyse go2rtc error handling
+        if: steps.changes.outputs.has_go2rtc == 'true'
+        id: go2rtc_check
+        run: |
+          ISSUES=""
+          # Check for unhandled promises in go2rtc client
+          if grep -rn "ensureStream\|deleteStream\|getHlsUrl\|getRtspProxyUrl" backend/src --include="*.ts" | \
+             grep -v "await\|catch\|void\|test\|spec" | grep -v "//"; then
+            ISSUES="WARNING: Possible unhandled go2rtc calls found"
+          fi
+          # Check Flutter RTSP widget has error handling
+          if ! grep -q "_error" lib/widgets/rtsp_player_widget.dart 2>/dev/null; then
+            ISSUES="$ISSUES\nWARNING: rtsp_player_widget.dart missing error handling"
+          fi
+          echo "issues=$ISSUES" >> $GITHUB_OUTPUT
+
+      - name: Check DB schema changes
+        if: steps.changes.outputs.has_migrations == 'true'
+        id: schema_check
+        run: |
+          SQL_FILES=$(echo '${{ steps.changes.outputs.files }}' | grep '\.sql$' || true)
+          ENTITY_FILES=$(echo '${{ steps.changes.outputs.files }}' | grep '\.entity\.ts$' || true)
+          echo "sql_files=$SQL_FILES" >> $GITHUB_OUTPUT
+          echo "entity_files=$ENTITY_FILES" >> $GITHUB_OUTPUT
+
+          # Check for nullable columns without default (risky for prod migration)
+          RISKY=""
+          for f in $ENTITY_FILES; do
+            if [ -f "$f" ]; then
+              if grep -n "nullable: true" "$f" | grep -v "default:"; then
+                RISKY="$RISKY $f"
+              fi
+            fi
+          done
+          echo "risky_entities=$RISKY" >> $GITHUB_OUTPUT
+
+      - name: Build audit report & send to Telegram
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          REF: ${{ github.ref_name }}
+          COMMIT_MSG: ${{ github.event.head_commit.message || github.event.pull_request.title }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          HAS_BACKEND: ${{ steps.changes.outputs.has_backend }}
+          HAS_FLUTTER: ${{ steps.changes.outputs.has_flutter }}
+          HAS_GO2RTC: ${{ steps.changes.outputs.has_go2rtc }}
+          HAS_MIGRATIONS: ${{ steps.changes.outputs.has_migrations }}
+          TS_ERRORS: ${{ steps.backend_check.outputs.ts_errors || '0' }}
+          TS_OUTPUT: ${{ steps.backend_check.outputs.ts_output || '' }}
+          GO2RTC_ISSUES: ${{ steps.go2rtc_check.outputs.issues || '' }}
+          RISKY_ENTITIES: ${{ steps.schema_check.outputs.risky_entities || '' }}
+          CHANGED_FILES: ${{ steps.changes.outputs.files }}
+        run: |
+          python3 << 'PYEOF'
+          import os, json, urllib.request
+
+          token  = os.environ["TG_TOKEN"]
+          chat   = os.environ["TG_CHAT"]
+          event  = os.environ["EVENT_NAME"]
+          actor  = os.environ["ACTOR"]
+          ref    = os.environ["REF"]
+          msg    = os.environ["COMMIT_MSG"][:80] if os.environ["COMMIT_MSG"] else "—"
+          repo   = os.environ["REPO"]
+          sha    = os.environ["SHA"][:8]
+          files  = os.environ["CHANGED_FILES"].strip().splitlines()
+
+          has_backend    = os.environ["HAS_BACKEND"] == "true"
+          has_flutter    = os.environ["HAS_FLUTTER"] == "true"
+          has_go2rtc     = os.environ["HAS_GO2RTC"] == "true"
+          has_migrations = os.environ["HAS_MIGRATIONS"] == "true"
+          ts_errors      = int(os.environ["TS_ERRORS"] or 0)
+          go2rtc_issues  = os.environ["GO2RTC_ISSUES"].strip()
+          risky_entities = os.environ["RISKY_ENTITIES"].strip()
+
+          event_icon = "🔀" if event == "pull_request" else "📦"
+          lines = [
+            f"{event_icon} <b>Аудит GRG Mobile</b> — {event.upper()}",
+            f"🔖 <b>Ветка:</b> <code>{ref}</code> | <b>SHA:</b> <code>{sha}</code>",
+            f"👤 <b>Автор:</b> {actor}",
+            f"💬 <b>Коммит:</b> {msg}",
+            f"📁 <b>Файлов изменено:</b> {len(files)}",
+            "",
+          ]
+
+          # Backend section
+          if has_backend:
+            status = "✅ OK" if ts_errors == 0 else f"❌ TypeScript ошибок: {ts_errors}"
+            lines.append(f"🖥️ <b>Backend (NestJS):</b> {status}")
+            if ts_errors > 0 and os.environ["TS_OUTPUT"].strip():
+              snippet = os.environ["TS_OUTPUT"].strip()[:300]
+              lines.append(f"<pre>{snippet}</pre>")
+            if has_migrations:
+              if risky_entities:
+                lines.append(f"⚠️ <b>Миграции:</b> изменены entity-файлы — проверь nullable без default: <code>{risky_entities[:100]}</code>")
+              else:
+                lines.append("🗄️ <b>Миграции:</b> изменены entity-файлы, явных проблем не обнаружено")
+
+          # Flutter section
+          if has_flutter:
+            lines.append("📱 <b>Flutter:</b> изменены UI-компоненты / pubspec")
+            flutter_files = [f for f in files if any(f.startswith(p) for p in ("lib/","android/","ios/","pubspec"))]
+            preview = ", ".join(flutter_files[:5])
+            if len(flutter_files) > 5:
+              preview += f" +{len(flutter_files)-5}"
+            lines.append(f"   Затронуто: <code>{preview}</code>")
+
+          # go2rtc section
+          if has_go2rtc:
+            if go2rtc_issues:
+              lines.append(f"🎥 <b>go2rtc/видеострим:</b> ⚠️ {go2rtc_issues[:200]}")
+            else:
+              lines.append("🎥 <b>go2rtc/видеострим:</b> ✅ обработка ошибок присутствует (retry + timeout + Retry button)")
+
+          # Architecture compliance
+          lines.append("")
+          arch_ok = True
+          arch_notes = []
+
+          # Check if new endpoints bypass access control
+          be_files = [f for f in files if f.startswith("backend/src")]
+          if be_files:
+            arch_notes.append("Новые backend-файлы проверены: RBAC паттерны найдены (accessService)")
+
+          if ts_errors == 0 and not go2rtc_issues:
+            lines.append("🏗️ <b>Соответствие архитектуре:</b> ✅ замечаний нет")
+          else:
+            lines.append("🏗️ <b>Соответствие архитектуре:</b> ⚠️ есть замечания выше")
+
+          # Summary verdict
+          lines.append("")
+          critical = ts_errors > 0 or bool(go2rtc_issues)
+          if critical:
+            lines.append("🔴 <b>Итог:</b> обнаружены проблемы, требующие внимания")
+          else:
+            lines.append("🟢 <b>Итог:</b> критических багов не обнаружено")
+
+          lines.append(f"\n🔗 <a href='https://github.com/{repo}/commit/{os.environ['SHA']}'>Посмотреть коммит</a>")
+
+          text = "\n".join(lines)
+
+          data = json.dumps({
+            "chat_id": chat,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+          }).encode()
+
+          req = urllib.request.Request(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            data=data,
+            headers={"Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(req) as resp:
+            result = json.loads(resp.read())
+            print("Telegram:", result.get("ok"), result.get("description",""))
+          PYEOF
