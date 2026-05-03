@@ -1,6 +1,88 @@
     'use strict';
     const API = '/api';
 
+    let _hlsInstance = null;
+    let _cameraDeviceId = null;
+
+    async function openCameraModal(deviceId, name, host, role) {
+      _cameraDeviceId = deviceId;
+      const modal     = document.getElementById('cameraModal');
+      const video     = document.getElementById('cameraVideo');
+      const errorEl   = document.getElementById('cameraError');
+      const loadingEl = document.getElementById('cameraLoading');
+      const liveBadge = document.getElementById('cameraLiveBadge');
+      const doorBtn   = document.getElementById('cameraOpenDoor');
+
+      document.getElementById('cameraModalTitle').textContent    = name;
+      document.getElementById('cameraModalSubtitle').textContent = host;
+      errorEl.style.display   = 'none';
+      errorEl.textContent     = '';
+      loadingEl.style.display = 'flex';
+      liveBadge.style.display = 'none';
+      video.src               = '';
+      doorBtn.style.display   = role === 'DOORPHONE' ? 'block' : 'none';
+
+      if (_hlsInstance) { _hlsInstance.destroy(); _hlsInstance = null; }
+      modal.style.display = 'flex';
+
+      try {
+        const data = await apiJson('/devices/' + deviceId + '/live-url');
+        if (!data.hlsUrl) {
+          loadingEl.style.display = 'none';
+          errorEl.textContent     = 'go2rtc не доступен — HLS URL не получен';
+          errorEl.style.display   = 'block';
+          return;
+        }
+        if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+          _hlsInstance = new Hls({ lowLatencyMode: true });
+          _hlsInstance.loadSource(data.hlsUrl);
+          _hlsInstance.attachMedia(video);
+          _hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
+            loadingEl.style.display = 'none';
+            liveBadge.style.display = 'block';
+            video.play().catch(function() {});
+          });
+          _hlsInstance.on(Hls.Events.ERROR, function(event, errData) {
+            if (errData.fatal) {
+              loadingEl.style.display = 'none';
+              errorEl.textContent     = 'Не удалось подключиться к камере';
+              errorEl.style.display   = 'block';
+            }
+          });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = data.hlsUrl;
+          video.addEventListener('loadedmetadata', function() {
+            loadingEl.style.display = 'none';
+            liveBadge.style.display = 'block';
+            video.play().catch(function() {});
+          }, { once: true });
+          video.addEventListener('error', function() {
+            loadingEl.style.display = 'none';
+            errorEl.textContent     = 'Не удалось подключиться к камере';
+            errorEl.style.display   = 'block';
+          }, { once: true });
+        } else {
+          loadingEl.style.display = 'none';
+          errorEl.textContent     = 'Браузер не поддерживает HLS';
+          errorEl.style.display   = 'block';
+        }
+      } catch (e) {
+        if (e instanceof ApiUnauthorized) return;
+        loadingEl.style.display = 'none';
+        errorEl.textContent     = 'Ошибка: ' + e.message;
+        errorEl.style.display   = 'block';
+      }
+    }
+
+    function closeCameraModal() {
+      const video = document.getElementById('cameraVideo');
+      video.pause();
+      video.src = '';
+      if (_hlsInstance) { _hlsInstance.destroy(); _hlsInstance = null; }
+      _cameraDeviceId = null;
+      document.getElementById('cameraModal').style.display = 'none';
+    }
+
     /**
      * T21: Generic table renderer.
      * @param {object} opts
