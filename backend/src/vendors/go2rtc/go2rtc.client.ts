@@ -31,14 +31,17 @@ export class Go2rtcClient {
   async ensureStream(name: string, rtspUrl: string): Promise<void> {
     if (!this.isConfigured || !this.http) return;
     try {
-      // Use ffmpeg source to transcode audio (G.711/PCMU → AAC) for HLS compatibility.
-      // Video is copied without re-encoding. Works even when camera has no audio.
-      const src = `ffmpeg:${rtspUrl}#video=copy#audio=aac`;
+      // Transcode video to H.264 for browser HLS compatibility (cameras may output H.265).
+      // Audio transcoded to AAC for HLS compatibility (G.711/PCMU etc).
+      const src = `ffmpeg:${rtspUrl}#video=h264#audio=aac`;
       const params = `name=${encodeURIComponent(name)}&src=${encodeURIComponent(src)}`;
       await firstValueFrom(
         this.http.put(`${this.internalUrl}/api/streams?${params}`, null),
       );
     } catch (e: unknown) {
+      // go2rtc returns 400 when stream already exists with same config — treat as success.
+      const status = (e as any)?.response?.status;
+      if (status === 400) return;
       const msg = e instanceof Error ? e.message : String(e);
       this.logger.warn(`go2rtc ensureStream "${name}" failed: ${msg}`);
     }
