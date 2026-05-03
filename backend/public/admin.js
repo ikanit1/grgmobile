@@ -924,7 +924,7 @@
                 '<td>' + floorBadge + '</td>' +
                 '<td>' + statusBadge + '</td>' +
                 '<td>' +
-                  (d.type && d.type.startsWith('UNIVIEW') ? '<button type="button" class="dev-view secondary" data-device-id="' + d.id + '" data-device-name="' + esc(d.name || '#' + d.id) + '" data-device-host="' + esc(d.host || '') + '" data-device-role="' + esc(d.role || '') + '" title="Смотреть видео">▶</button> ' : '') +
+                  (d.type === 'UNIVIEW_IPC' ? '<button type="button" class="dev-view secondary" data-device-id="' + d.id + '" data-device-name="' + esc(d.name || '#' + d.id) + '" data-device-host="' + esc(d.host || '') + '" data-device-role="' + esc(d.role || '') + '" title="Смотреть видео">▶</button> ' : '') +
                   '<button type="button" class="dev-edit secondary" data-device-id="' + d.id + '">Изменить</button> ' +
                   (d.role === 'NVR' ? '<button type="button" class="dev-scan-ch secondary" data-device-id="' + d.id + '" data-building-id="' + d.buildingId + '" data-device-name="' + esc(d.name || '#' + d.id) + '" title="Синхронизировать камеры NVR">🔄 Камеры</button> ' : '') +
                   '<button type="button" class="dev-open-door secondary" data-device-id="' + d.id + '" data-device-name="' + esc(d.name || '#' + d.id) + '" title="Открыть дверь">🔓</button> ' +
