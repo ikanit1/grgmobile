@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Doorphone — панель управления</title>
@@ -42,6 +43,14 @@
     .modal-title { font-family: var(--grg-font-display); font-size: 1rem; color: #fff; }
     .modal-body  { font-size: 13px; color: var(--grg-ink-200); line-height: 1.5; }
     .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+
+    /* ── Camera modal ── */
+    #cameraModal { z-index: 9000; }
+    #cameraVideo { width: 100%; max-height: 60vh; border-radius: 8px; background: #000; display: block; }
+    #cameraLoading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; border-radius: 8px; }
+    #cameraLiveBadge { position: absolute; top: 8px; right: 8px; background: rgba(220,30,30,0.18); border: 1px solid rgba(220,30,30,0.4); border-radius: 4px; padding: 2px 8px; font-size: 11px; color: #ff5555; }
+    #cameraOpenDoor { width: 100%; background: linear-gradient(135deg, var(--grg-primary), #5a4fd6); color: #fff; border: none; border-radius: 8px; padding: 0.625rem; font-size: 13px; font-weight: 600; cursor: pointer; }
+    #cameraOpenDoor:hover { opacity: 0.9; }
 
     body {
       font-family: var(--grg-font-sans);
@@ -470,6 +479,24 @@
     </div>
   </div>
 
+  <div id="cameraModal" class="modal-backdrop" style="display:none;" onclick="if(event.target===this)closeCameraModal()">
+    <div class="modal-box" style="max-width:640px;width:100%;gap:0.75rem;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <div class="modal-title" id="cameraModalTitle"></div>
+          <div style="font-size:12px;color:var(--grg-ink-400);margin-top:2px;" id="cameraModalSubtitle"></div>
+        </div>
+        <button type="button" id="cameraModalClose" class="secondary" style="padding:0.25rem 0.5rem;font-size:16px;line-height:1;">✕</button>
+      </div>
+      <div style="position:relative;">
+        <video id="cameraVideo" autoplay muted playsinline></video>
+        <div id="cameraLoading"><span style="color:var(--grg-ink-400);font-size:13px;">⏳ Подключение...</span></div>
+        <div id="cameraLiveBadge" style="display:none;">● LIVE</div>
+      </div>
+      <div id="cameraError" style="display:none;color:var(--grg-danger);font-size:13px;text-align:center;padding:0.5rem;"></div>
+      <button type="button" id="cameraOpenDoor" style="display:none;">🔓 Открыть дверь</button>
+    </div>
+  </div>
   <div id="toastContainer"></div>
   <script src="/admin.js" defer></script>
 </body>
