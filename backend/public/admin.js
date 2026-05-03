@@ -924,6 +924,7 @@
                 '<td>' + floorBadge + '</td>' +
                 '<td>' + statusBadge + '</td>' +
                 '<td>' +
+                  (d.type && d.type.startsWith('UNIVIEW') ? '<button type="button" class="dev-view secondary" data-device-id="' + d.id + '" data-device-name="' + esc(d.name || '#' + d.id) + '" data-device-host="' + esc(d.host || '') + '" data-device-role="' + esc(d.role || '') + '" title="Смотреть видео">▶</button> ' : '') +
                   '<button type="button" class="dev-edit secondary" data-device-id="' + d.id + '">Изменить</button> ' +
                   (d.role === 'NVR' ? '<button type="button" class="dev-scan-ch secondary" data-device-id="' + d.id + '" data-building-id="' + d.buildingId + '" data-device-name="' + esc(d.name || '#' + d.id) + '" title="Синхронизировать камеры NVR">🔄 Камеры</button> ' : '') +
                   '<button type="button" class="dev-open-door secondary" data-device-id="' + d.id + '" data-device-name="' + esc(d.name || '#' + d.id) + '" title="Открыть дверь">🔓</button> ' +
@@ -1004,6 +1005,16 @@
           devTableArea.addEventListener('click', async function(e) {
             const btn = e.target.closest('button');
             if (!btn) return;
+
+            if (btn.classList.contains('dev-view')) {
+              openCameraModal(
+                Number(btn.dataset.deviceId),
+                btn.dataset.deviceName || ('#' + btn.dataset.deviceId),
+                btn.dataset.deviceHost || '',
+                btn.dataset.deviceRole || ''
+              );
+              return;
+            }
 
             if (btn.classList.contains('dev-edit')) {
               openEditDeviceForm(Number(btn.dataset.deviceId), buildings);
@@ -1735,6 +1746,17 @@
       auth();
     });
     document.getElementById('logoutBtn').addEventListener('click', logout);
+
+    document.getElementById('cameraModalClose').addEventListener('click', closeCameraModal);
+    document.getElementById('cameraOpenDoor').addEventListener('click', async function() {
+      if (!_cameraDeviceId) return;
+      if (!(await confirmModal({ title: 'Открыть дверь?' }))) return;
+      try {
+        const r = await apiFetch('/control/' + _cameraDeviceId + '/open-door', { method: 'POST' });
+        const d = await r.json().catch(function() { return {}; });
+        if (r.ok) toast.ok('✅ Дверь открыта'); else toast.err('❌ Ошибка: ' + (d.message || r.statusText));
+      } catch (e) { if (!(e instanceof ApiUnauthorized)) toast.err('❌ Ошибка: ' + e.message); }
+    });
 
     fetchHealth();
     if (token) onTokenReady();
