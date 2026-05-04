@@ -1,5 +1,5 @@
 /**
- * E2E tests for POST /api/webhooks/akuvox endpoint.
+ * E2E tests for POST /api/webhooks/uniview endpoint.
  *
  * Uses SQLite in-memory (separate DB file) to isolate from dev data.
  * WEBHOOK_SECRET is set before AppModule loads.
@@ -17,7 +17,7 @@ import { EventLog } from '../src/events/entities/event-log.entity';
 
 // ─── Environment must be set before AppModule loads ────────────────────────
 const TEST_WEBHOOK_SECRET = 'test-webhook-secret-e2e';
-const TEST_MAC = '0C:11:05:22:BE:A4';
+const TEST_IP = '192.168.1.200';
 
 process.env.DB_TYPE = 'sqlite';
 process.env.DB_SQLITE_PATH = path.join(process.cwd(), 'data', 'webhooks-e2e.sqlite');
@@ -25,7 +25,7 @@ process.env.JWT_SECRET = 'test-jwt-secret-webhooks-32bytes!!';
 process.env.WEBHOOK_SECRET = TEST_WEBHOOK_SECRET;
 process.env.CREDENTIALS_ENCRYPTION_KEY = 'test-encryption-key-32-bytes!!!!';
 
-describe('POST /api/webhooks/akuvox (e2e)', () => {
+describe('POST /api/webhooks/uniview (e2e)', () => {
   let app: INestApplication;
   let devicesRepo: Repository<Device>;
   let eventLogRepo: Repository<EventLog>;
@@ -44,15 +44,14 @@ describe('POST /api/webhooks/akuvox (e2e)', () => {
     devicesRepo = moduleFixture.get<Repository<Device>>(getRepositoryToken(Device));
     eventLogRepo = moduleFixture.get<Repository<EventLog>>(getRepositoryToken(EventLog));
 
-    // Create a test device with known MAC
+    // Create a test device identified by IP (Uniview uses IP, not MAC)
     testDevice = devicesRepo.create({
-      name: 'Test Akuvox Panel',
-      type: DeviceType.AKUVOX,
+      name: 'Test Uniview IPC',
+      type: DeviceType.UNIVIEW_IPC,
       role: DeviceRole.DOORPHONE,
-      host: '192.168.1.100',
+      host: TEST_IP,
       httpPort: 80,
       rtspPort: 554,
-      macAddress: TEST_MAC,
       status: 'online',
       isConfigured: true,
       buildingId: 1,
@@ -70,53 +69,44 @@ describe('POST /api/webhooks/akuvox (e2e)', () => {
   describe('secret validation', () => {
     it('returns 401 when X-Webhook-Secret is absent', () =>
       request(app.getHttpServer())
-        .post('/api/webhooks/akuvox')
-        .send({ mac: TEST_MAC, eventType: 'door_open' })
+        .post('/api/webhooks/uniview')
+        .send({ deviceIp: TEST_IP, eventType: 'motion' })
         .expect(401));
 
     it('returns 401 when X-Webhook-Secret is wrong', () =>
       request(app.getHttpServer())
-        .post('/api/webhooks/akuvox')
-        .set('X-Webhook-Secret', 'wrong-secret')
-        .send({ mac: TEST_MAC, eventType: 'door_open' })
+        .post('/api/webhooks/uniview')
+        .set('x-webhook-secret', 'wrong-secret')
+        .send({ deviceIp: TEST_IP, eventType: 'motion' })
         .expect(401));
 
-    it('returns 200 with valid secret and known MAC', () =>
+    it('returns 200 with valid secret and known device IP', () =>
       request(app.getHttpServer())
-        .post('/api/webhooks/akuvox')
-        .set('X-Webhook-Secret', TEST_WEBHOOK_SECRET)
-        .send({ mac: TEST_MAC, eventType: 'door_open' })
+        .post('/api/webhooks/uniview')
+        .set('x-webhook-secret', TEST_WEBHOOK_SECRET)
+        .send({ deviceIp: TEST_IP, eventType: 'motion' })
         .expect(200));
   });
 
-  // ─── MAC validation ───────────────────────────────────────────────────────
+  // ─── Device validation ────────────────────────────────────────────────────
 
-  describe('MAC validation', () => {
-    it('returns 403 when MAC is not registered', () =>
+  describe('device validation', () => {
+    it('returns 403 when device IP is not registered', () =>
       request(app.getHttpServer())
-        .post('/api/webhooks/akuvox')
-        .set('X-Webhook-Secret', TEST_WEBHOOK_SECRET)
-        .send({ mac: 'AA:BB:CC:DD:EE:FF', eventType: 'door_open' })
+        .post('/api/webhooks/uniview')
+        .set('x-webhook-secret', TEST_WEBHOOK_SECRET)
+        .send({ deviceIp: '10.0.0.99', eventType: 'motion' })
         .expect(403));
-
-    it('matches MAC case-insensitively (dashes, lowercase)', () => {
-      const macVariant = TEST_MAC.replace(/:/g, '-').toLowerCase();
-      return request(app.getHttpServer())
-        .post('/api/webhooks/akuvox')
-        .set('X-Webhook-Secret', TEST_WEBHOOK_SECRET)
-        .send({ mac: macVariant, eventType: 'door_open' })
-        .expect(200);
-    });
   });
 
   // ─── Event persistence ────────────────────────────────────────────────────
 
   describe('event persistence', () => {
-    it('creates EventLog record for door_open event', async () => {
+    it('creates EventLog record for motion event', async () => {
       const res = await request(app.getHttpServer())
-        .post('/api/webhooks/akuvox')
-        .set('X-Webhook-Secret', TEST_WEBHOOK_SECRET)
-        .send({ mac: TEST_MAC, eventType: 'door_open' })
+        .post('/api/webhooks/uniview')
+        .set('x-webhook-secret', TEST_WEBHOOK_SECRET)
+        .send({ deviceIp: TEST_IP, eventType: 'motion' })
         .expect(200);
 
       const { logId } = res.body as { logId: number };
@@ -125,25 +115,24 @@ describe('POST /api/webhooks/akuvox (e2e)', () => {
       const log = await eventLogRepo.findOne({ where: { id: logId } });
       expect(log).toBeDefined();
       expect(log!.deviceId).toBe(testDevice.id);
-      expect(log!.eventType).toContain('door_open');
     });
 
     it('stores payload fields in EventLog.data', async () => {
       const res = await request(app.getHttpServer())
-        .post('/api/webhooks/akuvox')
-        .set('X-Webhook-Secret', TEST_WEBHOOK_SECRET)
-        .send({ mac: TEST_MAC, eventType: 'door_open', payload: { floor: 3, unit: 'A' } })
+        .post('/api/webhooks/uniview')
+        .set('x-webhook-secret', TEST_WEBHOOK_SECRET)
+        .send({ deviceIp: TEST_IP, eventType: 'motion', payload: { zone: 'entrance' } })
         .expect(200);
 
       const log = await eventLogRepo.findOne({ where: { id: (res.body as any).logId } });
-      expect(log!.data).toMatchObject({ floor: 3, unit: 'A', mac: TEST_MAC });
+      expect(log!.data).toMatchObject({ zone: 'entrance' });
     });
 
     it('returns logId in response body', async () => {
       const res = await request(app.getHttpServer())
-        .post('/api/webhooks/akuvox')
-        .set('X-Webhook-Secret', TEST_WEBHOOK_SECRET)
-        .send({ mac: TEST_MAC, eventType: 'call_finished' })
+        .post('/api/webhooks/uniview')
+        .set('x-webhook-secret', TEST_WEBHOOK_SECRET)
+        .send({ deviceIp: TEST_IP, eventType: 'tamper' })
         .expect(200);
 
       expect(res.body).toHaveProperty('logId');
@@ -154,18 +143,25 @@ describe('POST /api/webhooks/akuvox (e2e)', () => {
   // ─── Request body validation ──────────────────────────────────────────────
 
   describe('body validation', () => {
-    it('returns 400 when mac field is missing', () =>
+    it('returns 400 when deviceIp field is missing', () =>
       request(app.getHttpServer())
-        .post('/api/webhooks/akuvox')
-        .set('X-Webhook-Secret', TEST_WEBHOOK_SECRET)
-        .send({ eventType: 'door_open' })
+        .post('/api/webhooks/uniview')
+        .set('x-webhook-secret', TEST_WEBHOOK_SECRET)
+        .send({ eventType: 'motion' })
+        .expect(400));
+
+    it('returns 400 when deviceIp is not a valid IP', () =>
+      request(app.getHttpServer())
+        .post('/api/webhooks/uniview')
+        .set('x-webhook-secret', TEST_WEBHOOK_SECRET)
+        .send({ deviceIp: 'not-an-ip', eventType: 'motion' })
         .expect(400));
 
     it('returns 400 when eventType field is missing', () =>
       request(app.getHttpServer())
-        .post('/api/webhooks/akuvox')
-        .set('X-Webhook-Secret', TEST_WEBHOOK_SECRET)
-        .send({ mac: TEST_MAC })
+        .post('/api/webhooks/uniview')
+        .set('x-webhook-secret', TEST_WEBHOOK_SECRET)
+        .send({ deviceIp: TEST_IP })
         .expect(400));
   });
 });

@@ -1,7 +1,7 @@
 {
   "name": "doorphone-backend",
   "version": "1.0.0",
-  "description": "Backend API for Flutter doorphone app (Akuvox + Uniview LiteAPI + ONVIF)",
+  "description": "Backend API for Flutter doorphone app (Uniview LiteAPI + ONVIF)",
   "main": "dist/main.js",
   "scripts": {
     "start": "node dist/main.js",
@@ -11,7 +11,11 @@
     "test:e2e": "jest --config jest-e2e.json --runInBand",
     "db:reset": "node scripts/reset-database.js",
     "db:super-admin": "node scripts/make-super-admin.js",
-    "mock:uniview": "node scripts/uniview-mock.js"
+    "mock:uniview": "node scripts/uniview-mock.js",
+    "migration:generate": "typeorm-ts-node-commonjs -d src/data-source.ts migration:generate",
+    "migration:run": "typeorm-ts-node-commonjs -d src/data-source.ts migration:run",
+    "migration:revert": "typeorm-ts-node-commonjs -d src/data-source.ts migration:revert",
+    "migration:show": "typeorm-ts-node-commonjs -d src/data-source.ts migration:show"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",

@@ -12,9 +12,18 @@ export class CredentialsService {
 
   constructor() {
     const envKey = process.env.CREDENTIALS_ENCRYPTION_KEY;
-    if (envKey && envKey.length >= 32) {
-      this.key = Buffer.from(envKey.slice(0, 32), 'utf-8');
+    const keyBuf = envKey ? Buffer.from(envKey, 'utf-8') : null;
+    if (keyBuf && keyBuf.length >= KEY_LEN) {
+      this.key = keyBuf.subarray(0, KEY_LEN);
     } else {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(
+          'CREDENTIALS_ENCRYPTION_KEY must be set and at least 32 bytes in production',
+        );
+      }
+      console.warn(
+        '[CredentialsService] CREDENTIALS_ENCRYPTION_KEY not set or too short — using dev fallback. Set a strong key in production!',
+      );
       this.key = crypto.scryptSync('dev-default-key-change-in-production', 'salt', KEY_LEN);
     }
   }

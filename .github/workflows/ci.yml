@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend — build & test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test
+
+      - name: E2E tests
+        run: npm run test:e2e
+        env:
+          DB_TYPE: sqlite
+          JWT_SECRET: ci-jwt-secret-32-bytes-long!!!!!!!
+          WEBHOOK_SECRET: ci-webhook-secret
+          CREDENTIALS_ENCRYPTION_KEY: ci-encryption-key-32-bytes!!!!!!

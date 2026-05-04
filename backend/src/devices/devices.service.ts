@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Device } from './entities/device.entity';
@@ -12,6 +12,8 @@ import { BuildingsService } from '../buildings/buildings.service';
 
 @Injectable()
 export class DevicesService {
+  private readonly logger = new Logger(DevicesService.name);
+
   constructor(
     @InjectRepository(Device)
     private readonly devicesRepo: Repository<Device>,
@@ -33,6 +35,8 @@ export class DevicesService {
       if (dec) {
         dev.username = dec.username;
         dev.password = dec.password;
+      } else {
+        this.logger.warn(`Device ${id}: credentials present but decryption failed — key mismatch or corrupted data`);
       }
     }
     // If no credentials, plain username/password from DB (legacy records) are already present

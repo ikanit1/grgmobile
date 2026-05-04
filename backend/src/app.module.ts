@@ -48,6 +48,7 @@ const typeOrmConfig = usePostgres
         EventLog,
         ApartmentApplication,
       ],
+      migrations: ['dist/migrations/*.js'],
       synchronize: process.env.NODE_ENV !== 'production',
     }
   : {
@@ -64,6 +65,7 @@ const typeOrmConfig = usePostgres
         EventLog,
         ApartmentApplication,
       ],
+      migrations: ['dist/migrations/*.js'],
       synchronize: process.env.NODE_ENV !== 'production',
     };
 

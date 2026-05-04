@@ -37,7 +37,12 @@ export class EventsGateway implements OnGatewayConnection {
       return;
     }
     try {
-      const secret = process.env.JWT_SECRET || 'dev-secret';
+      const secret = process.env.JWT_SECRET;
+      if (!secret) {
+        client.emit('error', { message: 'Сервер не настроен: отсутствует JWT_SECRET' });
+        client.disconnect(true);
+        return;
+      }
       const payload = jwt.verify(token, secret) as Record<string, unknown>;
       (client as any).user = payload;
     } catch {
