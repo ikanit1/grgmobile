@@ -1,0 +1,201 @@
+name: Auto Audit on Push / PR
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  audit:
+    name: Code Audit & Telegram Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Determine changed files
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE=${{ github.event.pull_request.base.sha }}
+            HEAD=${{ github.event.pull_request.head.sha }}
+          else
+            BASE=${{ github.event.before }}
+            HEAD=${{ github.sha }}
+          fi
+
+          # Fallback if before is 0000... (first push)
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            FILES=$(git diff-tree --no-commit-id -r --name-only HEAD | tr '\n' ' ')
+          else
+            FILES=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || git show --stat --format="" HEAD | awk '{print $1}')
+          fi
+
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+
+          # Categorise
+          BACKEND=$(echo "$FILES" | tr ' ' '\n' | grep -c '^backend/' || true)
+          FLUTTER=$(echo "$FILES" | tr ' ' '\n' | grep -E '^lib/|^pubspec' | wc -l | tr -d ' ')
+          GO2RTC=$(echo "$FILES" | tr ' ' '\n' | grep -c 'go2rtc' || true)
+          MIGRATIONS=$(echo "$FILES" | tr ' ' '\n' | grep -c 'migration\|\.sql' || true)
+
+          echo "backend_count=$BACKEND"   >> $GITHUB_OUTPUT
+          echo "flutter_count=$FLUTTER"   >> $GITHUB_OUTPUT
+          echo "go2rtc_count=$GO2RTC"     >> $GITHUB_OUTPUT
+          echo "migration_count=$MIGRATIONS" >> $GITHUB_OUTPUT
+
+      # ── Backend NestJS audit ───────────────────────────────────────────
+      - name: Setup Node.js (backend audit)
+        if: steps.changes.outputs.backend_count > 0
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install backend deps & run TypeScript check
+        id: ts_check
+        if: steps.changes.outputs.backend_count > 0
+        working-directory: backend
+        run: |
+          npm ci --ignore-scripts 2>&1 | tail -5
+          npx tsc --noEmit 2>&1 > /tmp/ts_errors.txt || true
+          TS_ERRORS=$(wc -l < /tmp/ts_errors.txt | tr -d ' ')
+          echo "ts_errors=$TS_ERRORS" >> $GITHUB_OUTPUT
+          cat /tmp/ts_errors.txt | head -20
+
+      - name: Check migration files consistency
+        id: migration_check
+        if: steps.changes.outputs.backend_count > 0
+        run: |
+          ISSUES=""
+          # Check for missing synchronize:false guard in production code
+          if grep -r "synchronize: true" backend/src/ 2>/dev/null; then
+            ISSUES="${ISSUES}⚠️ synchronize:true найден в src (опасно для прода)\n"
+          fi
+          echo "issues=$ISSUES" >> $GITHUB_OUTPUT
+
+      # ── Flutter audit ──────────────────────────────────────────────────
+      - name: Setup Flutter (Flutter audit)
+        if: steps.changes.outputs.flutter_count > 0
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.x"
+          channel: "stable"
+
+      - name: Flutter analyze
+        id: flutter_check
+        if: steps.changes.outputs.flutter_count > 0
+        run: |
+          flutter pub get 2>&1 | tail -3
+          flutter analyze 2>&1 > /tmp/flutter_errors.txt || true
+          FL_ISSUES=$(grep -c 'error\|warning' /tmp/flutter_errors.txt || true)
+          echo "flutter_issues=$FL_ISSUES" >> $GITHUB_OUTPUT
+          cat /tmp/flutter_errors.txt | head -20
+
+      # ── go2rtc endpoint audit ──────────────────────────────────────────
+      - name: Audit go2rtc error handling
+        id: go2rtc_check
+        if: steps.changes.outputs.go2rtc_count > 0
+        run: |
+          ISSUES=""
+          # Every method touching go2rtc must have try/catch
+          FILES=$(find backend/src/vendors/go2rtc -name '*.ts' 2>/dev/null)
+          for f in $FILES; do
+            METHODS=$(grep -c 'async ' "$f" || true)
+            TRY_BLOCKS=$(grep -c 'try {' "$f" || true)
+            if [ "$METHODS" -gt "$TRY_BLOCKS" ]; then
+              ISSUES="${ISSUES}⚠️ $(basename $f): $METHODS async методов, только $TRY_BLOCKS try/catch блоков\n"
+            fi
+          done
+          # Check that 400 duplicate-stream error is handled
+          if ! grep -q '400' backend/src/vendors/go2rtc/go2rtc.client.ts 2>/dev/null; then
+            ISSUES="${ISSUES}❌ go2rtc.client.ts: нет обработки HTTP 400 (дубликат стрима)\n"
+          fi
+          echo "issues=$ISSUES" >> $GITHUB_OUTPUT
+
+      # ── Build Telegram report & send ──────────────────────────────────
+      - name: Build and send Telegram report
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT:  ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          EVENT="${{ github.event_name }}"
+          REPO="${{ github.repository }}"
+          BRANCH="${{ github.head_ref || github.ref_name }}"
+          ACTOR="${{ github.actor }}"
+          COMMIT="${{ github.sha }}"
+          SHORT_SHA="${COMMIT:0:7}"
+
+          if [ "$EVENT" = "pull_request" ]; then
+            PR_NUM="${{ github.event.pull_request.number }}"
+            PR_TITLE="${{ github.event.pull_request.title }}"
+            HEADER="🔀 *PR #${PR_NUM}*: ${PR_TITLE}"
+          else
+            MSG=$(git log -1 --pretty=format:'%s' "$COMMIT" 2>/dev/null || echo 'unknown')
+            HEADER="🚀 *Push* \`${SHORT_SHA}\`: ${MSG}"
+          fi
+
+          BACKEND_C="${{ steps.changes.outputs.backend_count }}"
+          FLUTTER_C="${{ steps.changes.outputs.flutter_count }}"
+          GO2RTC_C="${{ steps.changes.outputs.go2rtc_count }}"
+          MIGR_C="${{ steps.changes.outputs.migration_count }}"
+
+          TS_ERRORS="${{ steps.ts_check.outputs.ts_errors }}"
+          FL_ISSUES="${{ steps.flutter_check.outputs.flutter_issues }}"
+          BACKEND_ISSUES="${{ steps.migration_check.outputs.issues }}"
+          GO2RTC_ISSUES="${{ steps.go2rtc_check.outputs.issues }}"
+
+          # Overall status
+          CRITICAL=0
+          [ -n "$TS_ERRORS" ] && [ "$TS_ERRORS" -gt 0 ] && CRITICAL=1
+          [ -n "$FL_ISSUES" ] && [ "$FL_ISSUES" -gt 0 ] && CRITICAL=1
+          [ -n "$GO2RTC_ISSUES" ] && CRITICAL=1
+
+          if [ "$CRITICAL" = "1" ]; then
+            STATUS="🔴 Критические проблемы"
+          else
+            STATUS="✅ Изменения соответствуют архитектуре"
+          fi
+
+          MSG=$(cat <<EOF
+🤖 *GRG Mobile — Автоматический аудит*
+
+${HEADER}
+📦 Репозиторий: \`${REPO}\`
+🌿 Ветка: \`${BRANCH}\`
+👤 Автор: ${ACTOR}
+
+━━━━━━━━━━━━━━━━━━━━━
+📊 *Затронутые файлы*
+• Backend (NestJS): ${BACKEND_C} файл(ов)
+• Flutter: ${FLUTTER_C} файл(ов)
+• go2rtc: ${GO2RTC_C} файл(ов)
+• Миграции/SQL: ${MIGR_C} файл(ов)
+
+━━━━━━━━━━━━━━━━━━━━━
+🔍 *Результаты аудита*
+
+${BACKEND_C:+🏗️ *NestJS*: TypeScript ошибок — ${TS_ERRORS:-0}}
+${BACKEND_ISSUES:-✅ Схемы данных: нарушений не найдено}
+
+${FLUTTER_C:+📱 *Flutter*: предупреждений — ${FL_ISSUES:-0}}
+
+${GO2RTC_C:+🎥 *go2rtc эндпоинты*:}
+${GO2RTC_ISSUES:-✅ Обработка ошибок: корректна}
+
+━━━━━━━━━━━━━━━━━━━━━
+${STATUS}
+EOF
+          )
+
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT}" \
+            -d parse_mode="Markdown" \
+            --data-urlencode "text=${MSG}" \
+            -o /tmp/tg_response.json
+
+          cat /tmp/tg_response.json
+          grep -q '"ok":true' /tmp/tg_response.json && echo "✅ Telegram report sent" || echo "❌ Telegram send failed"
