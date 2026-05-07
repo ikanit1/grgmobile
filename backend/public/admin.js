@@ -854,6 +854,7 @@
         // ── Device Drawer ──────────────────────────────────────────────────────
         let _drawerBuildings = [];
         let _drawerEditId = null;
+        let _snapshotInterval = null;
 
         function openDeviceDrawer(buildings, editDevice, defaultBuildingId) {
           _drawerBuildings = buildings;
@@ -889,6 +890,10 @@
         function closeDeviceDrawer() {
           document.getElementById('deviceDrawer').classList.remove('open');
           document.getElementById('deviceDrawerOverlay').style.display = 'none';
+          clearInterval(_snapshotInterval);
+          _snapshotInterval = null;
+          const _closingImg = document.getElementById('dw-snapshot-img');
+          if (_closingImg && _closingImg._blobUrl) { URL.revokeObjectURL(_closingImg._blobUrl); }
           _drawerEditId = null;
         }
 
@@ -919,6 +924,7 @@
             (editDevice ? '<div style="margin-top:12px;border-top:1px solid var(--grg-border);padding-top:12px;"><div style="font-size:11px;font-weight:600;color:var(--grg-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">OSD / Подпись на видео</div><div class="drawer-field"><input id="dw-osd-name" value="' + esc(editDevice.name || '') + '" placeholder="Название для OSD" style="width:100%;"></div><button type="button" id="dw-apply-osd-btn" class="secondary" style="margin-top:6px;">Применить OSD</button></div>' : '') +
             (editDevice ? '<div style="margin-top:10px;"><div style="font-size:11px;font-weight:600;color:var(--grg-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Реле / Замок</div><div class="drawer-field-row"><div class="drawer-field"><label>Реле №</label><input id="dw-relay-id" type="number" value="1" min="1" max="8" style="width:60px;"></div><div class="drawer-field"><label>Время открытия (сек)</label><input id="dw-relay-dur" type="number" value="3" min="1" max="30" style="width:70px;"></div></div><button type="button" id="dw-apply-relay-btn" class="secondary" style="margin-top:6px;">Применить реле</button></div>' : '') +
             (editDevice ? '<div style="margin-top:10px;"><div style="font-size:11px;font-weight:600;color:var(--grg-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Изображение</div><div class="drawer-field" style="flex-direction:row;align-items:center;gap:8px;"><input type="checkbox" id="dw-wdr-enabled" style="width:16px;height:16px;cursor:pointer;"><label for="dw-wdr-enabled" style="cursor:pointer;margin:0;">Улучшение картинки (WDR)</label></div><button type="button" id="dw-apply-wdr-btn" class="secondary" style="margin-top:6px;">Применить</button></div>' : '') +
+            (editDevice ? '<div style="margin-top:12px;border-top:1px solid var(--grg-border);padding-top:12px;"><div style="font-size:11px;font-weight:600;color:var(--grg-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Снапшот камеры</div><div style="position:relative;background:#111;border-radius:8px;min-height:90px;overflow:hidden;margin-bottom:6px;"><img id="dw-snapshot-img" style="width:100%;border-radius:8px;display:none;"><div id="dw-snapshot-status" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#888;font-size:12px;">⟳ Загрузка...</div></div><button type="button" id="dw-snapshot-btn" class="secondary" style="margin-top:0;">Обновить снимок</button></div>' : '') +
             '<div id="drawerMsgEl"></div>';
           const osdBtn = document.getElementById('dw-apply-osd-btn');
           if (osdBtn) {
@@ -972,6 +978,35 @@
                 drawerMsg((e && e.message) || 'Ошибка настройки изображения', true);
               }
             };
+          }
+          const snapshotBtn = document.getElementById('dw-snapshot-btn');
+          if (snapshotBtn) {
+            const snapChannel = editDevice && editDevice.defaultChannel ? editDevice.defaultChannel : 1;
+            async function loadSnapshot() {
+              const img = document.getElementById('dw-snapshot-img');
+              const status = document.getElementById('dw-snapshot-status');
+              if (!img || !_drawerEditId) return;
+              status.textContent = '⟳ Загрузка...';
+              status.style.display = 'flex';
+              try {
+                const r = await apiFetch('/devices/' + _drawerEditId + '/snapshot/' + snapChannel + '?t=' + Date.now());
+                if (!r.ok) throw new Error(r.statusText);
+                const blob = await r.blob();
+                const url = URL.createObjectURL(blob);
+                if (img._blobUrl) URL.revokeObjectURL(img._blobUrl);
+                img._blobUrl = url;
+                img.src = url;
+                img.style.display = 'block';
+                status.style.display = 'none';
+              } catch (e) {
+                status.textContent = '❌ Снимок недоступен';
+                status.style.display = 'flex';
+                img.style.display = 'none';
+              }
+            }
+            loadSnapshot();
+            _snapshotInterval = setInterval(loadSnapshot, 10000);
+            snapshotBtn.onclick = loadSnapshot;
           }
           // wire save
           document.getElementById('drawerSaveBtn').onclick = async function() {
