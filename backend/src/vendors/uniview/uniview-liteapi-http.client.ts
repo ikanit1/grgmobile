@@ -476,5 +476,22 @@ export class UniviewLiteapiHttpClient {
       ],
     });
   }
+
+  // ─── Device Provisioning ───
+
+  /** PUT NTP config to device. Falls back to pool.ntp.org when ntpServer is empty. */
+  async applyNtpSync(device: Device, ntpServer: string): Promise<void> {
+    const server = ntpServer.trim() || 'pool.ntp.org';
+    await this.request(device, 'PUT', '/System/Time/NTP', {
+      Num: 1,
+      NTPServerInfos: [{
+        Enabled: 1,
+        AddressType: 2,
+        DomainName: server,
+        Port: 123,
+        SynchronizeInterval: 3600,
+      }],
+    });
+  }
 }
 

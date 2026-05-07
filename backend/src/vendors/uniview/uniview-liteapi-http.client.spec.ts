@@ -408,4 +408,36 @@ describe('UniviewLiteapiHttpClient', () => {
       expect(req.mock.calls[0][0].url).toContain('/Channels/1/Media/OSDs/ContentStyle');
     });
   });
+
+  // ---- applyNtpSync ----
+
+  describe('applyNtpSync', () => {
+    it('calls PUT /System/Time/NTP with correct body', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.applyNtpSync(device, 'kz.pool.ntp.org');
+      expect(req).toHaveBeenCalledWith(expect.objectContaining({
+        method: 'PUT',
+        url: 'http://192.168.1.200:80/LAPI/V1.0/System/Time/NTP',
+        data: JSON.stringify({
+          Num: 1,
+          NTPServerInfos: [{
+            Enabled: 1,
+            AddressType: 2,
+            DomainName: 'kz.pool.ntp.org',
+            Port: 123,
+            SynchronizeInterval: 3600,
+          }],
+        }),
+      }));
+    });
+
+    it('uses pool.ntp.org when ntpServer is empty string', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.applyNtpSync(device, '');
+      const body = JSON.parse(req.mock.calls[0][0].data);
+      expect(body.NTPServerInfos[0].DomainName).toBe('pool.ntp.org');
+    });
+  });
 });

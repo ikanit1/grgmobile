@@ -249,6 +249,10 @@ export class BuildingsService {
       this.univiewClient.applyDefaultOsd(saved, saved.name).catch((e: any) => {
         this.logger.warn(`applyDefaultOsd skipped for device ${saved.id}: ${e?.message}`);
       });
+      const ntpServer = process.env.DEFAULT_NTP_SERVER ?? 'pool.ntp.org';
+      this.univiewClient.applyNtpSync(saved, ntpServer).catch((e: any) => {
+        this.logger.warn(`applyNtpSync skipped for device ${saved.id}: ${e?.message}`);
+      });
     }
     this.eventLogService.create(null, EVENT_TYPE_DEVICE_ADDED, { name: dto.name, host: dto.host, type: dto.type }, {
       userId: user.id,
