@@ -103,11 +103,13 @@ describe('UniviewLiteapiHttpClient', () => {
       expect(result.success).toBe(false);
     });
 
-    it('does not retry when WWW-Authenticate header absent after 401', async () => {
+    it('probes once for WWW-Authenticate then gives up when still absent', async () => {
+      // 401 + missing www-authenticate → unauthenticated probe (2nd call) tries to recover challenge.
+      // Probe also returns 401 without challenge → no Digest retry, error propagates.
       const req = jest.fn().mockReturnValue(of(axiosResp({}, 401, {})));
       const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
       await client.openDoor(device);
-      expect(req).toHaveBeenCalledTimes(1);
+      expect(req).toHaveBeenCalledTimes(2);
     });
 
     it('does not retry when credentials are empty', async () => {
@@ -138,9 +140,11 @@ describe('UniviewLiteapiHttpClient', () => {
       expect((await new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc()).getLiveUrl(device, {})).url).toBe(rtsp);
     });
 
-    it('returns empty string when Data URL fields absent', async () => {
+    it('falls back to constructed RTSP URL when Data URL fields absent', async () => {
       const req = jest.fn().mockReturnValue(of(axiosResp({ Data: {} })));
-      expect((await new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc()).getLiveUrl(device, {})).url).toBe('');
+      const result = await new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc()).getLiveUrl(device, {});
+      expect(result.protocol).toBe('rtsp');
+      expect(result.url).toMatch(/^rtsp:\/\/.+@192\.168\.1\.200:554\/unicast\/c1\/s0\/live$/);
     });
 
     it('requests correct path with stream type from query', async () => {
@@ -164,13 +168,13 @@ describe('UniviewLiteapiHttpClient', () => {
   // ---- getSystemInfo ----
 
   describe('getSystemInfo', () => {
-    it('returns Data payload from /System/Equipment', async () => {
+    it('returns Data payload from /System/DeviceInfo when device returns DeviceModel', async () => {
       const payload = { DeviceModel: 'IPC3614SR3' };
       const req = jest.fn().mockReturnValue(of(axiosResp({ Data: payload })));
       const result = await new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc()).getSystemInfo(device);
       expect(result).toEqual(payload);
       expect(req).toHaveBeenCalledWith(
-        expect.objectContaining({ url: 'http://192.168.1.200:80/LAPI/V1.0/System/Equipment', method: 'GET' }),
+        expect.objectContaining({ url: 'http://192.168.1.200:80/LAPI/V1.0/System/DeviceInfo', method: 'GET' }),
       );
     });
 
