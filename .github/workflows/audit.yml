@@ -1,0 +1,93 @@
+name: Automated Code Audit + Telegram
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  audit:
+    name: Code Audit & Telegram Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+
+      - name: Fetch base branch (PRs only)
+        if: github.event_name == 'pull_request'
+        run: git fetch origin ${{ github.base_ref }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run code audit
+        id: audit
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_BASE_REF:   ${{ github.base_ref }}
+          GITHUB_HEAD_REF:   ${{ github.head_ref }}
+          GITHUB_REF:        ${{ github.ref }}
+          GITHUB_SHA:        ${{ github.sha }}
+          PR_NUMBER:         ${{ github.event.pull_request.number }}
+          REPO_NAME:         ${{ github.repository }}
+          ACTOR:             ${{ github.actor }}
+        run: |
+          python3 .github/scripts/audit.py > /tmp/audit_report.txt 2>&1
+          EXIT=$?
+          echo "--- Audit output ---"
+          cat /tmp/audit_report.txt
+          exit $EXIT
+
+      - name: Send Telegram report
+        if: always()
+        env:
+          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python3 - <<'PYEOF'
+          import os, json, urllib.request, urllib.error, sys
+
+          token   = os.environ.get('TELEGRAM_TOKEN', '').strip()
+          chat_id = os.environ.get('TELEGRAM_CHAT_ID', '').strip()
+
+          if not token or not chat_id:
+              print("Telegram secrets not configured — skipping notification")
+              sys.exit(0)
+
+          with open('/tmp/audit_report.txt', 'r', errors='replace') as fh:
+              text = fh.read()
+
+          # Telegram HTML message limit is 4096 chars
+          if len(text) > 3900:
+              text = text[:3900] + '\n\n<i>... отчёт обрезан</i>'
+
+          url     = f'https://api.telegram.org/bot{token}/sendMessage'
+          payload = json.dumps({
+              'chat_id':                  chat_id,
+              'text':                     text,
+              'parse_mode':               'HTML',
+              'disable_web_page_preview': True,
+          }).encode()
+
+          req = urllib.request.Request(
+              url, data=payload,
+              headers={'Content-Type': 'application/json'},
+          )
+          try:
+              resp = urllib.request.urlopen(req, timeout=30)
+              print(f"Telegram OK: HTTP {resp.status}")
+          except urllib.error.HTTPError as e:
+              body = e.read().decode(errors='replace')
+              print(f"Telegram HTTP {e.code}: {body}")
+              sys.exit(1)
+          except Exception as e:
+              print(f"Telegram error: {e}")
+              sys.exit(1)
+          PYEOF
