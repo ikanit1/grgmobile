@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { DevicesService } from '../devices/devices.service';
 import { Device, DeviceType, DeviceRole } from '../devices/entities/device.entity';
 import { OpenDoorDto } from './dto/open-door.dto';
@@ -17,6 +17,10 @@ import { DeviceEventDto } from './dto/device-event.dto';
 import { RecordingsQueryDto } from './dto/recordings-query.dto';
 import { PtzMoveDto } from './dto/ptz-move.dto';
 import { PtzPresetDto } from './dto/ptz-preset.dto';
+import { UserRole } from '../users/entities/user.entity';
+import { ApplyOsdDto } from './dto/apply-osd.dto';
+import { RelayConfigDto } from './dto/relay-config.dto';
+import { ImageConfigDto } from './dto/image-config.dto';
 
 @Injectable()
 export class ControlService {
@@ -349,6 +353,37 @@ export class ControlService {
     const ch = dto.channelId ?? device.defaultChannel ?? 1;
     await this.univiewClient.gotoPreset(device, ch, dto.presetId);
     return { success: true };
+  }
+
+  // ─── Uniview OSD ───
+
+  async applyOsd(deviceId: number, dto: ApplyOsdDto, user: RequestUser): Promise<void> {
+    if (user.role === UserRole.RESIDENT) {
+      throw new ForbiddenException('Недостаточно прав для изменения OSD');
+    }
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    const channelName = dto.channelName ?? device.name;
+    await this.univiewClient.applyDefaultOsd(device, channelName);
+  }
+
+  async setRelayConfig(deviceId: number, dto: RelayConfigDto, user: RequestUser): Promise<void> {
+    if (user.role === UserRole.RESIDENT) {
+      throw new ForbiddenException('Недостаточно прав для настройки реле');
+    }
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    await this.univiewClient.setRelayDuration(device, dto.relayId ?? 1, dto.durationSec);
+  }
+
+  async setImageConfig(deviceId: number, dto: ImageConfigDto, user: RequestUser): Promise<void> {
+    if (user.role === UserRole.RESIDENT) {
+      throw new ForbiddenException('Недостаточно прав для настройки изображения');
+    }
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    const channelId = device.defaultChannel ?? 1;
+    await this.univiewClient.setWdr(device, channelId, dto.wdrEnabled, dto.wdrLevel ?? 5);
   }
 }
 

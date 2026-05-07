@@ -215,7 +215,7 @@ class BackendClient {
       await _postWithRetry('auth/logout', body: {});
     } catch (e) {
       // Логируем, но всё равно чистим локальные данные
-      print('Backend logout failed: $e');
+      debugPrint('Backend logout failed: $e');
     } finally {
       await setToken(null);
       await _authStorage.clear();

@@ -306,9 +306,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onPressed: () async {
                         final url = _apiUrlController.text.trim();
                         if (url.isEmpty) return;
+                        final messenger = ScaffoldMessenger.of(context);
                         await widget.onConfigUpdated?.call(ApiConfig(baseUrl: url, useBackend: true));
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('URL сохранён')));
+                          messenger.showSnackBar(const SnackBar(content: Text('URL сохранён')));
                         }
                       },
                       child: const Text('Сохранить URL'),

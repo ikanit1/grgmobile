@@ -20,6 +20,8 @@ export class AdminController {
       return res.type('text/html').status(404).send('<h1>admin.html not found</h1><p>Create backend/public/admin.html</p>');
     }
     const html = readFileSync(path, 'utf-8');
+    const go2rtcPublicUrl = process.env.GO2RTC_PUBLIC_URL ?? '';
+    const connectSrc = ["'self'", 'ws:', 'wss:', go2rtcPublicUrl].filter(Boolean).join(' ');
     res.setHeader(
       'Content-Security-Policy',
       [
@@ -27,7 +29,7 @@ export class AdminController {
         "script-src 'self' https://cdn.jsdelivr.net",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com",
-        "connect-src 'self' ws: wss:",
+        `connect-src ${connectSrc}`,
         "img-src 'self' data: blob:",
         "media-src *",
         "frame-src 'none'",

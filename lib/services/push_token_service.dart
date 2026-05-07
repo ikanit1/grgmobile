@@ -20,7 +20,7 @@ Future<void> sendPushTokenToBackend(BackendClient client) async {
     if (!kIsWeb) {
       if (defaultTargetPlatform == TargetPlatform.android) {
         platform = 'android';
-      } else if (defaultTargetPlatform == TargetPlatform.iOS) platform = 'ios';
+      } else if (defaultTargetPlatform == TargetPlatform.iOS) { platform = 'ios'; }
     }
     await client.sendPushToken(token, platform: platform);
   } catch (_) {

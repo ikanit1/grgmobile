@@ -109,10 +109,10 @@ export class DevicesService {
     const device = await this.devicesRepo.findOne({ where: { id: deviceId }, select: { id: true, buildingId: true, status: true } });
     if (!device) return;
     const previousStatus = device.status;
-    await this.devicesRepo.update(deviceId, {
-      status,
-      lastSeenAt: status === 'online' ? new Date() : undefined,
-    });
+    const now = status === 'online' ? new Date() : undefined;
+    await this.devicesRepo.update(deviceId, { status, lastSeenAt: now });
+    // Cascade status to NVR sub-cameras so they reflect parent connectivity
+    await this.devicesRepo.update({ nvrId: deviceId }, { status, lastSeenAt: now });
     if (previousStatus !== status) {
       this.eventsGateway.emitDeviceStatusChange(deviceId, device.buildingId, status);
     }

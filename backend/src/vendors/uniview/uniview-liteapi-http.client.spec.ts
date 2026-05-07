@@ -103,11 +103,13 @@ describe('UniviewLiteapiHttpClient', () => {
       expect(result.success).toBe(false);
     });
 
-    it('does not retry when WWW-Authenticate header absent after 401', async () => {
+    it('probes once for WWW-Authenticate then gives up when still absent', async () => {
+      // 401 + missing www-authenticate → unauthenticated probe (2nd call) tries to recover challenge.
+      // Probe also returns 401 without challenge → no Digest retry, error propagates.
       const req = jest.fn().mockReturnValue(of(axiosResp({}, 401, {})));
       const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
       await client.openDoor(device);
-      expect(req).toHaveBeenCalledTimes(1);
+      expect(req).toHaveBeenCalledTimes(2);
     });
 
     it('does not retry when credentials are empty', async () => {
@@ -138,9 +140,11 @@ describe('UniviewLiteapiHttpClient', () => {
       expect((await new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc()).getLiveUrl(device, {})).url).toBe(rtsp);
     });
 
-    it('returns empty string when Data URL fields absent', async () => {
+    it('falls back to constructed RTSP URL when Data URL fields absent', async () => {
       const req = jest.fn().mockReturnValue(of(axiosResp({ Data: {} })));
-      expect((await new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc()).getLiveUrl(device, {})).url).toBe('');
+      const result = await new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc()).getLiveUrl(device, {});
+      expect(result.protocol).toBe('rtsp');
+      expect(result.url).toMatch(/^rtsp:\/\/.+@192\.168\.1\.200:554\/unicast\/c1\/s0\/live$/);
     });
 
     it('requests correct path with stream type from query', async () => {
@@ -164,13 +168,13 @@ describe('UniviewLiteapiHttpClient', () => {
   // ---- getSystemInfo ----
 
   describe('getSystemInfo', () => {
-    it('returns Data payload from /System/Equipment', async () => {
+    it('returns Data payload from /System/DeviceInfo when device returns DeviceModel', async () => {
       const payload = { DeviceModel: 'IPC3614SR3' };
       const req = jest.fn().mockReturnValue(of(axiosResp({ Data: payload })));
       const result = await new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc()).getSystemInfo(device);
       expect(result).toEqual(payload);
       expect(req).toHaveBeenCalledWith(
-        expect.objectContaining({ url: 'http://192.168.1.200:80/LAPI/V1.0/System/Equipment', method: 'GET' }),
+        expect.objectContaining({ url: 'http://192.168.1.200:80/LAPI/V1.0/System/DeviceInfo', method: 'GET' }),
       );
     });
 
@@ -362,6 +366,148 @@ describe('UniviewLiteapiHttpClient', () => {
       const callConfig = req.mock.calls[0][0];
       expect(callConfig.method).toBe('PUT');
       expect(callConfig.url).toContain('/Channels/1/PTZ/Presets/2/Goto');
+    });
+  });
+
+  // ---- applyDefaultOsd ----
+
+  describe('applyDefaultOsd', () => {
+    it('sends ContentStyle PUT then Contents PUT with correct payloads', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.applyDefaultOsd(device, 'Entrance 1');
+
+      expect(req).toHaveBeenCalledTimes(2);
+      expect(req.mock.calls[0][0]).toMatchObject({
+        method: 'PUT',
+        url: 'http://192.168.1.200:80/LAPI/V1.0/Channels/1/Media/OSDs/ContentStyle',
+        data: JSON.stringify({ FontSize: 2, Color: 16777215, DateFormat: 0 }),
+      });
+      expect(req.mock.calls[1][0]).toMatchObject({
+        method: 'PUT',
+        url: 'http://192.168.1.200:80/LAPI/V1.0/Channels/1/Media/OSDs/Contents',
+        data: JSON.stringify({
+          Num: 2,
+          ContentList: [
+            { ID: 0, Enabled: 1, Num: 1, ContentInfo: [{ ContentType: 1, Value: 'Entrance 1' }] },
+            { ID: 1, Enabled: 1, Num: 1, ContentInfo: [{ ContentType: 2, Value: '' }] },
+          ],
+        }),
+      });
+    });
+
+    it('uses device.defaultChannel', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const d = makeDevice({ defaultChannel: 3 });
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.applyDefaultOsd(d, 'Camera 3');
+      expect(req.mock.calls[0][0].url).toContain('/Channels/3/Media/OSDs/ContentStyle');
+    });
+
+    it('falls back to channel 1 when defaultChannel is undefined', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const d = makeDevice({ defaultChannel: undefined });
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.applyDefaultOsd(d, 'Camera');
+      expect(req.mock.calls[0][0].url).toContain('/Channels/1/Media/OSDs/ContentStyle');
+    });
+  });
+
+  // ---- applyNtpSync ----
+
+  describe('applyNtpSync', () => {
+    it('calls PUT /System/Time/NTP with correct body', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.applyNtpSync(device, 'kz.pool.ntp.org');
+      expect(req).toHaveBeenCalledWith(expect.objectContaining({
+        method: 'PUT',
+        url: 'http://192.168.1.200:80/LAPI/V1.0/System/Time/NTP',
+        data: JSON.stringify({
+          Num: 1,
+          NTPServerInfos: [{
+            Enabled: 1,
+            AddressType: 2,
+            DomainName: 'kz.pool.ntp.org',
+            Port: 123,
+            SynchronizeInterval: 3600,
+          }],
+        }),
+      }));
+    });
+
+    it('uses pool.ntp.org when ntpServer is empty string', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.applyNtpSync(device, '');
+      const body = JSON.parse(req.mock.calls[0][0].data);
+      expect(body.NTPServerInfos[0].DomainName).toBe('pool.ntp.org');
+    });
+  });
+
+  // ---- setRelayDuration ----
+
+  describe('setRelayDuration', () => {
+    it('calls PUT /IO/OutputSwitches/1/BasicInfos with Duration in ms', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.setRelayDuration(device, 1, 3);
+      expect(req).toHaveBeenCalledWith(expect.objectContaining({
+        method: 'PUT',
+        url: 'http://192.168.1.200:80/LAPI/V1.0/IO/OutputSwitches/1/BasicInfos',
+        data: JSON.stringify({ ID: 1, Name: 'Relay 1', Duration: 3000, RunMode: 1, RelayMode: 1 }),
+      }));
+    });
+
+    it('converts seconds to milliseconds correctly', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.setRelayDuration(device, 2, 5);
+      const body = JSON.parse(req.mock.calls[0][0].data);
+      expect(body.Duration).toBe(5000);
+      expect(body.ID).toBe(2);
+      expect(body.Name).toBe('Relay 2');
+    });
+  });
+
+  // ---- setWdr ----
+
+  describe('setWdr', () => {
+    const currentExposure = { Mode: 1, WideDynamic: { Mode: 0, Level: 1, OpenSensitivity: 5 } };
+
+    it('GETs current exposure then PUTs with WDR enabled', async () => {
+      const req = jest.fn()
+        .mockReturnValueOnce(of(axiosResp({ Data: currentExposure })))
+        .mockReturnValueOnce(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.setWdr(device, 1, true, 5);
+      expect(req).toHaveBeenCalledTimes(2);
+      expect(req.mock.calls[0][0]).toMatchObject({ method: 'GET', url: expect.stringContaining('/Channels/1/Image/Advanced/Exposure') });
+      const putBody = JSON.parse(req.mock.calls[1][0].data);
+      expect(putBody.WideDynamic.Mode).toBe(1);
+      expect(putBody.WideDynamic.Level).toBe(5);
+      expect(putBody.WideDynamic.OpenSensitivity).toBe(5); // preserved from GET
+      expect(putBody.Mode).toBe(1); // preserved from GET
+    });
+
+    it('GETs current exposure then PUTs with WDR disabled', async () => {
+      const req = jest.fn()
+        .mockReturnValueOnce(of(axiosResp({ Data: { ...currentExposure, WideDynamic: { Mode: 1, Level: 7 } } })))
+        .mockReturnValueOnce(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.setWdr(device, 1, false, 5);
+      const putBody = JSON.parse(req.mock.calls[1][0].data);
+      expect(putBody.WideDynamic.Mode).toBe(0);
+    });
+
+    it('uses provided channelId in both GET and PUT URLs', async () => {
+      const req = jest.fn()
+        .mockReturnValueOnce(of(axiosResp({ Data: currentExposure })))
+        .mockReturnValueOnce(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.setWdr(device, 2, true, 5);
+      expect(req.mock.calls[0][0].url).toContain('/Channels/2/Image/Advanced/Exposure');
+      expect(req.mock.calls[1][0].url).toContain('/Channels/2/Image/Advanced/Exposure');
     });
   });
 });

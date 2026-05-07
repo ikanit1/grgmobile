@@ -159,7 +159,7 @@ class _AddResidentScreenState extends State<AddResidentScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 DropdownButtonFormField<int>(
-                                  value: _selectedApartmentId,
+                                  initialValue: _selectedApartmentId,
                                   decoration: const InputDecoration(
                                     border: OutlineInputBorder(),
                                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -214,7 +214,7 @@ class _AddResidentScreenState extends State<AddResidentScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 DropdownButtonFormField<String>(
-                                  value: _role,
+                                  initialValue: _role,
                                   decoration: const InputDecoration(
                                     border: OutlineInputBorder(),
                                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),

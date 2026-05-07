@@ -1,10 +1,10 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Building } from './entities/building.entity';
-import { Device, DeviceRole } from '../devices/entities/device.entity';
+import { Device, DeviceRole, DeviceType } from '../devices/entities/device.entity';
 import { ResidentialComplex } from '../residential-complexes/entities/residential-complex.entity';
 import { Organization } from '../organizations/entities/organization.entity';
 import { AccessService } from '../access/access.service';
@@ -19,11 +19,14 @@ import {
   EVENT_TYPE_DEVICE_ADDED,
 } from '../events/event-types';
 import { CredentialsService } from '../credentials/credentials.service';
+import { UniviewLiteapiHttpClient } from '../vendors/uniview/uniview-liteapi-http.client';
 
 const DEVICES_CACHE_TTL = 30_000; // 30 seconds
 
 @Injectable()
 export class BuildingsService {
+  private readonly logger = new Logger(BuildingsService.name);
+
   constructor(
     @InjectRepository(Building)
     private readonly buildingsRepo: Repository<Building>,
@@ -37,6 +40,7 @@ export class BuildingsService {
     private readonly eventLogService: EventLogService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     private readonly credentialsService: CredentialsService,
+    private readonly univiewClient: UniviewLiteapiHttpClient,
   ) {}
 
   /**
@@ -241,6 +245,15 @@ export class BuildingsService {
       nvrId: dto.nvrId ?? null,
     });
     const saved = await this.devicesRepo.save(dev) as Device;
+    if (saved.type === DeviceType.UNIVIEW_IPC || saved.type === DeviceType.UNIVIEW_NVR) {
+      this.univiewClient.applyDefaultOsd(saved, saved.name).catch((e: any) => {
+        this.logger.warn(`applyDefaultOsd skipped for device ${saved.id}: ${e?.message}`);
+      });
+      const ntpServer = process.env.DEFAULT_NTP_SERVER ?? 'pool.ntp.org';
+      this.univiewClient.applyNtpSync(saved, ntpServer).catch((e: any) => {
+        this.logger.warn(`applyNtpSync skipped for device ${saved.id}: ${e?.message}`);
+      });
+    }
     this.eventLogService.create(null, EVENT_TYPE_DEVICE_ADDED, { name: dto.name, host: dto.host, type: dto.type }, {
       userId: user.id,
       organizationId: building.complex?.organizationId ?? null,

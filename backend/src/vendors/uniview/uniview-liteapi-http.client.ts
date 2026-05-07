@@ -8,6 +8,9 @@ import { buildDigestHeader, parseWwwAuthenticate } from './digest-auth.helper';
 import { CredentialsService } from '../../credentials/credentials.service';
 
 /** LiteAPI HTTP client — IPC & NVR (doc: LiteAPI Document for IPC V5.07, NVR V5.14). Auth: HTTP Digest per 3.2. */
+// Panel user management (RFID cards, PIN codes, face recognition) is NOT available
+// via LiteAPI. Uniview manages access control through the EGS Platform or local device UI.
+// If this integration is needed in future, it requires the separate LAPI SDK (not LiteAPI).
 @Injectable()
 export class UniviewLiteapiHttpClient {
   private readonly logger = new Logger(UniviewLiteapiHttpClient.name);
@@ -436,6 +439,93 @@ export class UniviewLiteapiHttpClient {
       }
     }
     return results;
+  }
+
+  // ─── OSD Configuration ───
+
+  /** PUT OSD font/color/date style to device channel. */
+  async setOsdContentStyle(
+    device: Device,
+    channelId: number,
+    style: { FontSize: number; Color: number; DateFormat: number },
+  ): Promise<void> {
+    await this.request(device, 'PUT', `/Channels/${channelId}/Media/OSDs/ContentStyle`, style);
+  }
+
+  /** PUT OSD content slots to device channel. */
+  async setOsdContents(
+    device: Device,
+    channelId: number,
+    contents: { Num: number; ContentList: Array<{ ID: number; Enabled: number; Num: number; ContentInfo: Array<{ ContentType: number; Value?: string }> }> },
+  ): Promise<void> {
+    await this.request(device, 'PUT', `/Channels/${channelId}/Media/OSDs/Contents`, contents);
+  }
+
+  /**
+   * Write default OSD to the device: slot 0 = custom text (channelName), slot 1 = date/time.
+   * Uses device.defaultChannel ?? 1. Fire-and-forget safe — throws on LiteAPI error.
+   */
+  async applyDefaultOsd(device: Device, channelName: string): Promise<void> {
+    const ch = device.defaultChannel ?? 1;
+    await this.setOsdContentStyle(device, ch, { FontSize: 2, Color: 16777215, DateFormat: 0 });
+    await this.setOsdContents(device, ch, {
+      Num: 2,
+      ContentList: [
+        { ID: 0, Enabled: 1, Num: 1, ContentInfo: [{ ContentType: 1, Value: channelName }] },
+        { ID: 1, Enabled: 1, Num: 1, ContentInfo: [{ ContentType: 2, Value: '' }] },
+      ],
+    });
+  }
+
+  // ─── Device Provisioning ───
+
+  /** PUT NTP config to device. Falls back to pool.ntp.org when ntpServer is empty. */
+  async applyNtpSync(device: Device, ntpServer: string): Promise<void> {
+    const server = ntpServer.trim() || 'pool.ntp.org';
+    await this.request(device, 'PUT', '/System/Time/NTP', {
+      Num: 1,
+      NTPServerInfos: [{
+        Enabled: 1,
+        AddressType: 2,
+        DomainName: server,
+        Port: 123,
+        SynchronizeInterval: 3600,
+      }],
+    });
+  }
+
+  /**
+   * Configure relay output pulse duration.
+   * Duration is accepted in seconds — converted to ms for the LiteAPI.
+   * RunMode 1 = Normally Open; RelayMode 1 = Monostable (pulse).
+   */
+  async setRelayDuration(device: Device, relayId: number, durationSec: number): Promise<void> {
+    await this.request(device, 'PUT', `/IO/OutputSwitches/${relayId}/BasicInfos`, {
+      ID: relayId,
+      Name: `Relay ${relayId}`,
+      Duration: durationSec * 1000,
+      RunMode: 1,
+      RelayMode: 1,
+    });
+  }
+
+  /**
+   * Enable or disable Wide Dynamic Range on a camera channel.
+   * GET-then-PUT: preserves all other exposure settings; only WideDynamic fields are changed.
+   * level: 1–9 (default 5 = balanced). Ignored when enabled is false (resets to 1).
+   */
+  async setWdr(device: Device, channelId: number, enabled: boolean, level = 5): Promise<void> {
+    const current = await this.request(device, 'GET', `/Channels/${channelId}/Image/Advanced/Exposure`);
+    const base = current?.Data ?? current ?? {};
+    const body = {
+      ...base,
+      WideDynamic: {
+        ...(base.WideDynamic ?? {}),
+        Mode: enabled ? 1 : 0,
+        Level: enabled ? level : 1,
+      },
+    };
+    await this.request(device, 'PUT', `/Channels/${channelId}/Image/Advanced/Exposure`, body);
   }
 }
 

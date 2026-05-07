@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -88,7 +88,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result.success ? 'Дверь открыта' : result.message),
+          content: Text(result.success ? 'Р”РІРµСЂСЊ РѕС‚РєСЂС‹С‚Р°' : result.message),
           backgroundColor: result.success ? AppColors.success : AppColors.danger,
         ),
       );
@@ -110,7 +110,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       builder: (_) => LiveViewScreen(
         client: widget.client,
         deviceId: widget.deviceId,
-        deviceName: widget.buildingName ?? 'Домофон',
+        deviceName: widget.buildingName ?? 'Р”РѕРјРѕС„РѕРЅ',
       ),
     ));
   }
@@ -119,8 +119,8 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   Widget build(BuildContext context) {
     final subtitle = [
       if (widget.buildingName != null && widget.buildingName!.isNotEmpty) widget.buildingName,
-      if (widget.apartmentNumber != null && widget.apartmentNumber!.isNotEmpty) 'кв. ${widget.apartmentNumber}',
-    ].join(' · ');
+      if (widget.apartmentNumber != null && widget.apartmentNumber!.isNotEmpty) 'РєРІ. ${widget.apartmentNumber}',
+    ].join(' В· ');
 
     return Material(
       color: Colors.black87,
@@ -133,7 +133,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'ВХОДЯЩИЙ',
+                    'Р’РҐРћР”РЇР©РР™',
                     style: TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 11,
@@ -162,9 +162,9 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
                 children: [
                   _secondaryButton(
                     icon: Icons.call_end_rounded,
-                    label: 'Сбросить',
+                    label: 'РЎР±СЂРѕСЃРёС‚СЊ',
                     size: 56,
-                    bg: AppColors.danger.withOpacity(0.20),
+                    bg: AppColors.danger.withValues(alpha: 0.20),
                     fg: AppColors.danger,
                     labelColor: const Color(0xFFFF9CB1),
                     onPressed: widget.onDismiss,
@@ -172,9 +172,9 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
                   _primaryOpenButton(),
                   _secondaryButton(
                     icon: Icons.videocam_rounded,
-                    label: 'Ответить',
+                    label: 'РћС‚РІРµС‚РёС‚СЊ',
                     size: 56,
-                    bg: AppColors.purple.withOpacity(0.25),
+                    bg: AppColors.purple.withValues(alpha: 0.25),
                     fg: const Color(0xFFC9A6FF),
                     labelColor: const Color(0xFFC9A6FF),
                     onPressed: _answer,
@@ -195,7 +195,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
         children: [
           CircularProgressIndicator(color: AppColors.purple),
           SizedBox(height: 16),
-          Text('Загрузка видео...', style: TextStyle(color: Colors.white70)),
+          Text('Р—Р°РіСЂСѓР·РєР° РІРёРґРµРѕ...', style: TextStyle(color: Colors.white70)),
         ],
       );
     }
@@ -223,12 +223,12 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.success.withOpacity(0.18),
+                  color: AppColors.success.withValues(alpha: 0.18),
                   spreadRadius: 8,
                   blurRadius: 0,
                 ),
                 BoxShadow(
-                  color: AppColors.success.withOpacity(0.50),
+                  color: AppColors.success.withValues(alpha: 0.50),
                   blurRadius: 30,
                   offset: const Offset(0, 14),
                 ),
@@ -246,7 +246,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'Открыть дверь',
+          'РћС‚РєСЂС‹С‚СЊ РґРІРµСЂСЊ',
           style: TextStyle(
             color: Color(0xFFA7FFD6),
             fontSize: 12,
@@ -287,3 +287,4 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     );
   }
 }
+
