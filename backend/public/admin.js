@@ -916,7 +916,26 @@
             (!isNvr ? '<div class="drawer-field-row"><div class="drawer-field"><label>Канал</label><input id="dw-ch" type="number" value="' + (editDevice && editDevice.defaultChannel != null ? editDevice.defaultChannel : 1) + '"></div><div class="drawer-field"><label>Поток</label><input id="dw-stream" placeholder="main" value="' + esc(editDevice && editDevice.defaultStream ? String(editDevice.defaultStream) : 'main') + '"></div></div>' : '') +
             '<div class="drawer-field"><label>Свой RTSP URL (необяз.)</label><input id="dw-rtsp-url" placeholder="rtsp://192.168.1.100:554/live" value="' + esc(editDevice && editDevice.customRtspUrl ? String(editDevice.customRtspUrl) : '') + '"></div>' +
             (isNvr && !editDevice ? '<div class="drawer-hint"><div class="h-title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg> После добавления NVR</div><p>Нажмите «Синхр. камеры» — каналы NVR станут устройствами автоматически.</p></div>' : '') +
+            (editDevice ? '<div style="margin-top:12px;border-top:1px solid var(--grg-border);padding-top:12px;"><div style="font-size:11px;font-weight:600;color:var(--grg-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">OSD / Подпись на видео</div><div class="drawer-field"><input id="dw-osd-name" value="' + esc(editDevice.name || '') + '" placeholder="Название для OSD" style="width:100%;"></div><button type="button" id="dw-apply-osd-btn" class="secondary" style="margin-top:6px;">Применить OSD</button></div>' : '') +
             '<div id="drawerMsgEl"></div>';
+          const osdBtn = document.getElementById('dw-apply-osd-btn');
+          if (osdBtn) {
+            osdBtn.onclick = async function() {
+              const nameInput = document.getElementById('dw-osd-name');
+              const channelName = (nameInput ? nameInput.value : '').trim() || undefined;
+              try {
+                const r = await apiFetch('/devices/' + _drawerEditId + '/apply-osd', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ channelName }),
+                });
+                if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.message || r.statusText); }
+                drawerMsg('OSD применён', false);
+              } catch (e) {
+                drawerMsg((e && e.message) || 'Ошибка применения OSD', true);
+              }
+            };
+          }
           // wire save
           document.getElementById('drawerSaveBtn').onclick = async function() {
             await saveDrawerDevice(dtype, drole);
