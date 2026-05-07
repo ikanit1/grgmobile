@@ -3,15 +3,15 @@ services:
     image: postgres:16-alpine
     container_name: doorphone-postgres
     environment:
-      POSTGRES_DB: doorphone
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${DB_NAME:-doorphone}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - doorphone_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d doorphone"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_NAME:-doorphone}"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -27,6 +27,34 @@ services:
       - ./go2rtc.yaml:/config/go2rtc.yaml:ro
     environment:
       - GO2RTC_CONFIG=/config/go2rtc.yaml
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: doorphone-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      DB_TYPE: postgres
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-doorphone}
+      PORT: 3000
+      NODE_ENV: ${NODE_ENV:-development}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-dev-default-key-change-in-production}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-doorphone-webhook-secret}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      GO2RTC_URL: http://go2rtc:1984
+      GO2RTC_PUBLIC_URL: ${GO2RTC_PUBLIC_URL:-http://localhost:1984}
+      ALLOW_LOOPBACK_HOSTS: ${ALLOW_LOOPBACK_HOSTS:-true}
 
 volumes:
   doorphone_postgres_data:
