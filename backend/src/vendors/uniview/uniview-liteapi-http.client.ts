@@ -493,5 +493,20 @@ export class UniviewLiteapiHttpClient {
       }],
     });
   }
+
+  /**
+   * Configure relay output pulse duration.
+   * Duration is accepted in seconds — converted to ms for the LiteAPI.
+   * RunMode 1 = Normally Open; RelayMode 1 = Monostable (pulse).
+   */
+  async setRelayDuration(device: Device, relayId: number, durationSec: number): Promise<void> {
+    await this.request(device, 'PUT', `/IO/OutputSwitches/${relayId}/BasicInfos`, {
+      ID: relayId,
+      Name: `Relay ${relayId}`,
+      Duration: durationSec * 1000,
+      RunMode: 1,
+      RelayMode: 1,
+    });
+  }
 }
 

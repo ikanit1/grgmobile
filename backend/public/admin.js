@@ -917,6 +917,7 @@
             '<div class="drawer-field"><label>Свой RTSP URL (необяз.)</label><input id="dw-rtsp-url" placeholder="rtsp://192.168.1.100:554/live" value="' + esc(editDevice && editDevice.customRtspUrl ? String(editDevice.customRtspUrl) : '') + '"></div>' +
             (isNvr && !editDevice ? '<div class="drawer-hint"><div class="h-title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg> После добавления NVR</div><p>Нажмите «Синхр. камеры» — каналы NVR станут устройствами автоматически.</p></div>' : '') +
             (editDevice ? '<div style="margin-top:12px;border-top:1px solid var(--grg-border);padding-top:12px;"><div style="font-size:11px;font-weight:600;color:var(--grg-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">OSD / Подпись на видео</div><div class="drawer-field"><input id="dw-osd-name" value="' + esc(editDevice.name || '') + '" placeholder="Название для OSD" style="width:100%;"></div><button type="button" id="dw-apply-osd-btn" class="secondary" style="margin-top:6px;">Применить OSD</button></div>' : '') +
+            (editDevice ? '<div style="margin-top:10px;"><div style="font-size:11px;font-weight:600;color:var(--grg-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Реле / Замок</div><div class="drawer-field-row"><div class="drawer-field"><label>Реле №</label><input id="dw-relay-id" type="number" value="1" min="1" max="8" style="width:60px;"></div><div class="drawer-field"><label>Время открытия (сек)</label><input id="dw-relay-dur" type="number" value="3" min="1" max="30" style="width:70px;"></div></div><button type="button" id="dw-apply-relay-btn" class="secondary" style="margin-top:6px;">Применить реле</button></div>' : '') +
             '<div id="drawerMsgEl"></div>';
           const osdBtn = document.getElementById('dw-apply-osd-btn');
           if (osdBtn) {
@@ -933,6 +934,24 @@
                 drawerMsg('OSD применён', false);
               } catch (e) {
                 drawerMsg((e && e.message) || 'Ошибка применения OSD', true);
+              }
+            };
+          }
+          const relayBtn = document.getElementById('dw-apply-relay-btn');
+          if (relayBtn) {
+            relayBtn.onclick = async function() {
+              const relayId = parseInt(document.getElementById('dw-relay-id').value, 10) || 1;
+              const durationSec = parseInt(document.getElementById('dw-relay-dur').value, 10) || 3;
+              try {
+                const r = await apiFetch('/devices/' + _drawerEditId + '/relay-config', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ relayId, durationSec }),
+                });
+                if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.message || r.statusText); }
+                drawerMsg('Реле настроено', false);
+              } catch (e) {
+                drawerMsg((e && e.message) || 'Ошибка настройки реле', true);
               }
             };
           }

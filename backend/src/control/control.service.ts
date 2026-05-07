@@ -19,6 +19,7 @@ import { PtzMoveDto } from './dto/ptz-move.dto';
 import { PtzPresetDto } from './dto/ptz-preset.dto';
 import { UserRole } from '../users/entities/user.entity';
 import { ApplyOsdDto } from './dto/apply-osd.dto';
+import { RelayConfigDto } from './dto/relay-config.dto';
 
 @Injectable()
 export class ControlService {
@@ -363,6 +364,15 @@ export class ControlService {
     await this.accessService.assertCanAccessDevice(user, device.buildingId);
     const channelName = dto.channelName ?? device.name;
     await this.univiewClient.applyDefaultOsd(device, channelName);
+  }
+
+  async setRelayConfig(deviceId: number, dto: RelayConfigDto, user: RequestUser): Promise<void> {
+    if (user.role === UserRole.RESIDENT) {
+      throw new ForbiddenException('Недостаточно прав для настройки реле');
+    }
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    await this.univiewClient.setRelayDuration(device, dto.relayId ?? 1, dto.durationSec);
   }
 }
 

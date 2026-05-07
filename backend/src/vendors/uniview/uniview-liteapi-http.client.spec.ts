@@ -440,4 +440,29 @@ describe('UniviewLiteapiHttpClient', () => {
       expect(body.NTPServerInfos[0].DomainName).toBe('pool.ntp.org');
     });
   });
+
+  // ---- setRelayDuration ----
+
+  describe('setRelayDuration', () => {
+    it('calls PUT /IO/OutputSwitches/1/BasicInfos with Duration in ms', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.setRelayDuration(device, 1, 3);
+      expect(req).toHaveBeenCalledWith(expect.objectContaining({
+        method: 'PUT',
+        url: 'http://192.168.1.200:80/LAPI/V1.0/IO/OutputSwitches/1/BasicInfos',
+        data: JSON.stringify({ ID: 1, Name: 'Relay 1', Duration: 3000, RunMode: 1, RelayMode: 1 }),
+      }));
+    });
+
+    it('converts seconds to milliseconds correctly', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.setRelayDuration(device, 2, 5);
+      const body = JSON.parse(req.mock.calls[0][0].data);
+      expect(body.Duration).toBe(5000);
+      expect(body.ID).toBe(2);
+      expect(body.Name).toBe('Relay 2');
+    });
+  });
 });
