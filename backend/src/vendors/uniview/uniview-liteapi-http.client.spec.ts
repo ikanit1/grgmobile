@@ -364,4 +364,47 @@ describe('UniviewLiteapiHttpClient', () => {
       expect(callConfig.url).toContain('/Channels/1/PTZ/Presets/2/Goto');
     });
   });
+
+  // ---- applyDefaultOsd ----
+
+  describe('applyDefaultOsd', () => {
+    it('sends ContentStyle PUT then Contents PUT with correct payloads', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.applyDefaultOsd(device, 'Entrance 1');
+
+      expect(req).toHaveBeenCalledTimes(2);
+      expect(req.mock.calls[0][0]).toMatchObject({
+        method: 'PUT',
+        url: 'http://192.168.1.200:80/LAPI/V1.0/Channels/1/Media/OSDs/ContentStyle',
+        data: JSON.stringify({ FontSize: 2, FontColor: 16777215, DateFormat: 0 }),
+      });
+      expect(req.mock.calls[1][0]).toMatchObject({
+        method: 'PUT',
+        url: 'http://192.168.1.200:80/LAPI/V1.0/Channels/1/Media/OSDs/Contents',
+        data: JSON.stringify({
+          Contents: [
+            { No: 0, ContentType: 1, Value: 'Entrance 1', Enabled: 1 },
+            { No: 1, ContentType: 2, Enabled: 1 },
+          ],
+        }),
+      });
+    });
+
+    it('uses device.defaultChannel', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const d = makeDevice({ defaultChannel: 3 });
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.applyDefaultOsd(d, 'Camera 3');
+      expect(req.mock.calls[0][0].url).toContain('/Channels/3/Media/OSDs/ContentStyle');
+    });
+
+    it('falls back to channel 1 when defaultChannel is undefined', async () => {
+      const req = jest.fn().mockReturnValue(of(axiosResp({ ResponseCode: 0 })));
+      const d = makeDevice({ defaultChannel: undefined });
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.applyDefaultOsd(d, 'Camera');
+      expect(req.mock.calls[0][0].url).toContain('/Channels/1/Media/OSDs/ContentStyle');
+    });
+  });
 });

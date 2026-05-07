@@ -8,6 +8,9 @@ import { buildDigestHeader, parseWwwAuthenticate } from './digest-auth.helper';
 import { CredentialsService } from '../../credentials/credentials.service';
 
 /** LiteAPI HTTP client — IPC & NVR (doc: LiteAPI Document for IPC V5.07, NVR V5.14). Auth: HTTP Digest per 3.2. */
+// Panel user management (RFID cards, PIN codes, face recognition) is NOT available
+// via LiteAPI. Uniview manages access control through the EGS Platform or local device UI.
+// If this integration is needed in future, it requires the separate LAPI SDK (not LiteAPI).
 @Injectable()
 export class UniviewLiteapiHttpClient {
   private readonly logger = new Logger(UniviewLiteapiHttpClient.name);
@@ -436,6 +439,39 @@ export class UniviewLiteapiHttpClient {
       }
     }
     return results;
+  }
+
+  // ─── OSD Configuration ───
+
+  async setOsdContentStyle(
+    device: Device,
+    channelId: number,
+    style: { FontSize: number; FontColor: number; DateFormat: number },
+  ): Promise<void> {
+    await this.request(device, 'PUT', `/Channels/${channelId}/Media/OSDs/ContentStyle`, style);
+  }
+
+  async setOsdContents(
+    device: Device,
+    channelId: number,
+    contents: { Contents: Array<{ No: number; ContentType: number; Value?: string; Enabled: number }> },
+  ): Promise<void> {
+    await this.request(device, 'PUT', `/Channels/${channelId}/Media/OSDs/Contents`, contents);
+  }
+
+  /**
+   * Write default OSD to the device: slot 0 = custom text (channelName), slot 1 = date/time.
+   * Uses device.defaultChannel ?? 1. Fire-and-forget safe — throws on LiteAPI error.
+   */
+  async applyDefaultOsd(device: Device, channelName: string): Promise<void> {
+    const ch = device.defaultChannel ?? 1;
+    await this.setOsdContentStyle(device, ch, { FontSize: 2, FontColor: 16777215, DateFormat: 0 });
+    await this.setOsdContents(device, ch, {
+      Contents: [
+        { No: 0, ContentType: 1, Value: channelName, Enabled: 1 },
+        { No: 1, ContentType: 2, Enabled: 1 },
+      ],
+    });
   }
 }
 
