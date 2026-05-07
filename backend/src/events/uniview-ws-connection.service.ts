@@ -8,7 +8,7 @@ import { EventsGateway } from './events.gateway';
 import { EventLogService } from './event-log.service';
 import { PushService } from '../push/push.service';
 import { AccessService } from '../access/access.service';
-import { UniviewLiteapiWsClient } from '../vendors/uniview/uniview-liteapi-ws.client';
+import { UniviewLiteapiWsClient, WS_EVENT_PATH } from '../vendors/uniview/uniview-liteapi-ws.client';
 import {
   EVENT_TYPE_UNIVIEW_DOORBELL,
   EVENT_TYPE_DEVICE_WS_CONNECTED,
@@ -65,7 +65,7 @@ export class UniviewWsConnectionService implements OnModuleDestroy {
     if (state.stopped) return;
     const { device } = state;
     const buildingId = device.buildingId ?? (device.building as any)?.id;
-    const wsUrl = `ws://${device.host}:${device.httpPort}`;
+    const wsUrl = `ws://${device.host}:${device.httpPort}${WS_EVENT_PATH}`;
     const client = new UniviewLiteapiWsClient(wsUrl);
 
     client.onEvent((payload) => {

@@ -4,6 +4,9 @@
  */
 import WebSocket from 'ws';
 
+/** Standard LiteAPI WebSocket event path (same on all Uniview IPC/NVR/Door Station). */
+export const WS_EVENT_PATH = '/LAPI/V1.0/Notify/Event';
+
 export interface LiteApiWsRequest {
   RequestURL: string;
   Method: string;
