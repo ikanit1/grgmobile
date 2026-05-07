@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../api/backend_client.dart';
 import '../models/auth_user.dart';
 import '../theme/app_theme.dart';
@@ -59,10 +59,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   String _roleLabel(String role) {
     switch (role) {
-      case 'SUPER_ADMIN':     return 'Супер-администратор';
-      case 'ORG_ADMIN':       return 'Администратор УК';
-      case 'COMPLEX_MANAGER': return 'Менеджер ЖК';
-      case 'RESIDENT':        return 'Житель';
+      case 'SUPER_ADMIN':     return 'РЎСѓРїРµСЂ-Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ';
+      case 'ORG_ADMIN':       return 'РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ РЈРљ';
+      case 'COMPLEX_MANAGER': return 'РњРµРЅРµРґР¶РµСЂ Р–Рљ';
+      case 'RESIDENT':        return 'Р–РёС‚РµР»СЊ';
       default:                return role;
     }
   }
@@ -105,8 +105,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: const Text('Сохранено'),
-                            backgroundColor: AppColors.success.withOpacity(0.9),
+                            content: const Text('РЎРѕС…СЂР°РЅРµРЅРѕ'),
+                            backgroundColor: AppColors.success.withValues(alpha: 0.9),
                           ),
                         );
                         _load();
@@ -115,14 +115,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Ошибка: $e'),
-                            backgroundColor: AppColors.danger.withOpacity(0.9),
+                            content: Text('РћС€РёР±РєР°: $e'),
+                            backgroundColor: AppColors.danger.withValues(alpha: 0.9),
                           ),
                         );
                       }
                     }
                   },
-                  child: const Text('Сохранить'),
+                  child: const Text('РЎРѕС…СЂР°РЅРёС‚СЊ'),
                 ),
               ),
             ],
@@ -152,11 +152,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Сменить пароль', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const Text('РЎРјРµРЅРёС‚СЊ РїР°СЂРѕР»СЊ', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
               const SizedBox(height: 16),
-              TextField(controller: curCtrl, obscureText: true, decoration: const InputDecoration(hintText: 'Текущий пароль')),
+              TextField(controller: curCtrl, obscureText: true, decoration: const InputDecoration(hintText: 'РўРµРєСѓС‰РёР№ РїР°СЂРѕР»СЊ')),
               const SizedBox(height: 12),
-              TextField(controller: newCtrl, obscureText: true, decoration: const InputDecoration(hintText: 'Новый пароль')),
+              TextField(controller: newCtrl, obscureText: true, decoration: const InputDecoration(hintText: 'РќРѕРІС‹Р№ РїР°СЂРѕР»СЊ')),
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
@@ -169,8 +169,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: const Text('Пароль изменён'),
-                            backgroundColor: AppColors.success.withOpacity(0.9),
+                            content: const Text('РџР°СЂРѕР»СЊ РёР·РјРµРЅС‘РЅ'),
+                            backgroundColor: AppColors.success.withValues(alpha: 0.9),
                           ),
                         );
                       }
@@ -178,14 +178,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Ошибка: $e'),
-                            backgroundColor: AppColors.danger.withOpacity(0.9),
+                            content: Text('РћС€РёР±РєР°: $e'),
+                            backgroundColor: AppColors.danger.withValues(alpha: 0.9),
                           ),
                         );
                       }
                     }
                   },
-                  child: const Text('Сохранить'),
+                  child: const Text('РЎРѕС…СЂР°РЅРёС‚СЊ'),
                 ),
               ),
             ],
@@ -198,9 +198,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final role = widget.authUser?.role ?? 'RESIDENT';
-    final name = _profile?['name'] as String? ?? widget.authUser?.name ?? '—';
-    final email = _profile?['email'] as String? ?? '—';
-    final phone = _profile?['phone'] as String? ?? '—';
+    final name = _profile?['name'] as String? ?? widget.authUser?.name ?? 'вЂ”';
+    final email = _profile?['email'] as String? ?? 'вЂ”';
+    final phone = _profile?['phone'] as String? ?? 'вЂ”';
     final hasClient = widget.client != null;
 
     return SingleChildScrollView(
@@ -211,14 +211,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Padding(
             padding: const EdgeInsets.only(bottom: 16),
             child: Text(
-              'Профиль',
+              'РџСЂРѕС„РёР»СЊ',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
 
-          // ── Hero card ──
+          // в”Ђв”Ђ Hero card в”Ђв”Ђ
           GlassCard(
             margin: const EdgeInsets.only(bottom: 16),
             child: Row(
@@ -235,7 +235,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.purple.withOpacity(0.4),
+                        color: AppColors.purple.withValues(alpha: 0.4),
                         blurRadius: 16,
                         offset: const Offset(0, 6),
                       ),
@@ -281,12 +281,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   Text(_error!, style: const TextStyle(color: AppColors.danger)),
                   const SizedBox(height: 12),
-                  ElevatedButton(onPressed: _load, child: const Text('Повторить')),
+                  ElevatedButton(onPressed: _load, child: const Text('РџРѕРІС‚РѕСЂРёС‚СЊ')),
                 ],
               ),
             )
           else if (hasClient) ...[
-            // ── Данные ──
+            // в”Ђв”Ђ Р”Р°РЅРЅС‹Рµ в”Ђв”Ђ
             GlassCard(
               padding: EdgeInsets.zero,
               margin: const EdgeInsets.only(bottom: 16),
@@ -297,7 +297,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     label: 'Email',
                     value: email,
                     onTap: () => _openEditField(
-                      'Изменить email', 'Email',
+                      'РР·РјРµРЅРёС‚СЊ email', 'Email',
                       _profile?['email'] as String? ?? '',
                       false,
                       (v) => widget.client!.updateProfile(email: v),
@@ -306,10 +306,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Divider(height: 1, color: AppColors.border),
                   _ProfileRow(
                     icon: Icons.phone_outlined,
-                    label: 'Телефон',
+                    label: 'РўРµР»РµС„РѕРЅ',
                     value: phone,
                     onTap: () => _openEditField(
-                      'Изменить телефон', 'Телефон',
+                      'РР·РјРµРЅРёС‚СЊ С‚РµР»РµС„РѕРЅ', 'РўРµР»РµС„РѕРЅ',
                       _profile?['phone'] as String? ?? '',
                       false,
                       (v) => widget.client!.updateProfile(phone: v),
@@ -318,8 +318,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Divider(height: 1, color: AppColors.border),
                   _ProfileRow(
                     icon: Icons.lock_outline,
-                    label: 'Пароль',
-                    value: '••••••••',
+                    label: 'РџР°СЂРѕР»СЊ',
+                    value: 'вЂўвЂўвЂўвЂўвЂўвЂўвЂўвЂў',
                     onTap: _openPasswordChange,
                   ),
                 ],
@@ -327,22 +327,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
 
-          // ── Выход ──
+          // в”Ђв”Ђ Р’С‹С…РѕРґ в”Ђв”Ђ
           GlassCard(
             padding: EdgeInsets.zero,
-            borderColor: AppColors.danger.withOpacity(0.25),
+            borderColor: AppColors.danger.withValues(alpha: 0.25),
             child: InkWell(
               onTap: () async {
                 final ok = await showDialog<bool>(
                   context: context,
                   builder: (ctx) => AlertDialog(
                     backgroundColor: const Color(0xFF1A0B2E),
-                    title: const Text('Выйти из аккаунта?'),
+                    title: const Text('Р’С‹Р№С‚Рё РёР· Р°РєРєР°СѓРЅС‚Р°?'),
                     actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('РћС‚РјРµРЅР°')),
                       TextButton(
                         onPressed: () => Navigator.pop(ctx, true),
-                        child: Text('Выйти', style: TextStyle(color: AppColors.danger)),
+                        child: Text('Р’С‹Р№С‚Рё', style: TextStyle(color: AppColors.danger)),
                       ),
                     ],
                   ),
@@ -357,7 +357,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Icon(Icons.logout, color: AppColors.danger, size: 20),
                     const SizedBox(width: 12),
                     Text(
-                      'Выйти из аккаунта',
+                      'Р’С‹Р№С‚Рё РёР· Р°РєРєР°СѓРЅС‚Р°',
                       style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.w600),
                     ),
                   ],
@@ -412,3 +412,4 @@ class _ProfileRow extends StatelessWidget {
     );
   }
 }
+

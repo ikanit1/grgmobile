@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import '../api/backend_client.dart';
 import '../services/events_socket_service.dart';
@@ -21,11 +21,11 @@ class _EventsScreenState extends State<EventsScreen> {
   StreamSubscription? _sub;
 
   static const _filters = {
-    'all': 'Все',
-    'door_open': 'Двери',
-    'incoming_call': 'Звонки',
-    'motion': 'Движение',
-    'alarm': 'Тревоги',
+    'all': 'Р’СЃРµ',
+    'door_open': 'Р”РІРµСЂРё',
+    'incoming_call': 'Р—РІРѕРЅРєРё',
+    'motion': 'Р”РІРёР¶РµРЅРёРµ',
+    'alarm': 'РўСЂРµРІРѕРіРё',
   };
 
   @override
@@ -79,10 +79,10 @@ class _EventsScreenState extends State<EventsScreen> {
 
   Color _iconBg(String type) {
     final t = type.toLowerCase();
-    if (t.contains('door_open'))                          return AppColors.success.withOpacity(0.18);
-    if (t.contains('incoming_call') || t.contains('doorbell')) return AppColors.purple.withOpacity(0.20);
-    if (t.contains('motion') || t.contains('vmd'))        return AppColors.warning.withOpacity(0.18);
-    if (t.contains('alarm') || t.contains('io'))          return AppColors.danger.withOpacity(0.18);
+    if (t.contains('door_open'))                          return AppColors.success.withValues(alpha: 0.18);
+    if (t.contains('incoming_call') || t.contains('doorbell')) return AppColors.purple.withValues(alpha: 0.20);
+    if (t.contains('motion') || t.contains('vmd'))        return AppColors.warning.withValues(alpha: 0.18);
+    if (t.contains('alarm') || t.contains('io'))          return AppColors.danger.withValues(alpha: 0.18);
     return AppColors.border;
   }
 
@@ -97,22 +97,22 @@ class _EventsScreenState extends State<EventsScreen> {
 
   String _label(String type) {
     final t = type.toLowerCase();
-    if (t.contains('door_open'))                          return 'Открытие двери';
-    if (t.contains('incoming_call') || t.contains('doorbell')) return 'Входящий звонок';
-    if (t.contains('motion') || t.contains('vmd'))        return 'Движение';
-    if (t.contains('alarm') || t.contains('io'))          return 'Тревога';
+    if (t.contains('door_open'))                          return 'РћС‚РєСЂС‹С‚РёРµ РґРІРµСЂРё';
+    if (t.contains('incoming_call') || t.contains('doorbell')) return 'Р’С…РѕРґСЏС‰РёР№ Р·РІРѕРЅРѕРє';
+    if (t.contains('motion') || t.contains('vmd'))        return 'Р”РІРёР¶РµРЅРёРµ';
+    if (t.contains('alarm') || t.contains('io'))          return 'РўСЂРµРІРѕРіР°';
     return type;
   }
 
   String _formatTime(String iso) {
-    if (iso.isEmpty) return '—';
+    if (iso.isEmpty) return 'вЂ”';
     try {
       final dt = DateTime.parse(iso).toLocal();
       final now = DateTime.now();
       final diff = now.difference(dt);
-      if (diff.inMinutes < 1) return 'только что';
-      if (diff.inHours < 1)   return '${diff.inMinutes} мин назад';
-      if (diff.inDays < 1)    return '${diff.inHours} ч назад';
+      if (diff.inMinutes < 1) return 'С‚РѕР»СЊРєРѕ С‡С‚Рѕ';
+      if (diff.inHours < 1)   return '${diff.inMinutes} РјРёРЅ РЅР°Р·Р°Рґ';
+      if (diff.inDays < 1)    return '${diff.inHours} С‡ РЅР°Р·Р°Рґ';
       return '${dt.day}.${dt.month.toString().padLeft(2,'0')} ${dt.hour}:${dt.minute.toString().padLeft(2,'0')}';
     } catch (_) {
       return iso;
@@ -128,7 +128,7 @@ class _EventsScreenState extends State<EventsScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
-            'События',
+            'РЎРѕР±С‹С‚РёСЏ',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w700,
             ),
@@ -146,7 +146,7 @@ class _EventsScreenState extends State<EventsScreen> {
                   label: Text(entry.value),
                   selected: selected,
                   onSelected: (_) => setState(() => _filter = entry.key),
-                  selectedColor: AppColors.purple.withOpacity(0.25),
+                  selectedColor: AppColors.purple.withValues(alpha: 0.25),
                   checkmarkColor: AppColors.textSecondary,
                 ),
               );
@@ -169,7 +169,7 @@ class _EventsScreenState extends State<EventsScreen> {
                           const SizedBox(height: 12),
                           Text(_error!, style: const TextStyle(color: AppColors.danger)),
                           const SizedBox(height: 16),
-                          ElevatedButton(onPressed: _load, child: const Text('Повторить')),
+                          ElevatedButton(onPressed: _load, child: const Text('РџРѕРІС‚РѕСЂРёС‚СЊ')),
                         ],
                       ),
                     )
@@ -181,7 +181,7 @@ class _EventsScreenState extends State<EventsScreen> {
                               Icon(Icons.event_note_outlined, color: AppColors.textSecondary, size: 48),
                               const SizedBox(height: 12),
                               Text(
-                                'Нет событий',
+                                'РќРµС‚ СЃРѕР±С‹С‚РёР№',
                                 style: TextStyle(color: AppColors.textSecondary),
                               ),
                             ],
@@ -218,7 +218,7 @@ class _EventsScreenState extends State<EventsScreen> {
                                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                                 ),
                                 subtitle: Text(
-                                  'Устройство #${e.deviceId ?? '—'}',
+                                  'РЈСЃС‚СЂРѕР№СЃС‚РІРѕ #${e.deviceId ?? 'вЂ”'}',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: AppColors.textSecondary,
@@ -240,3 +240,4 @@ class _EventsScreenState extends State<EventsScreen> {
     );
   }
 }
+

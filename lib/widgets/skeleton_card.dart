@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import 'glass_card.dart';
@@ -56,9 +56,9 @@ class _SkeletonBoxState extends State<SkeletonBox>
               borderRadius: BorderRadius.circular(widget.radius),
               gradient: LinearGradient(
                 colors: [
-                  AppColors.purple.withOpacity(0.08 + _animation.value * 0.14),
-                  AppColors.purple.withOpacity(0.18 + _animation.value * 0.14),
-                  AppColors.purple.withOpacity(0.08 + _animation.value * 0.14),
+                  AppColors.purple.withValues(alpha: 0.08 + _animation.value * 0.14),
+                  AppColors.purple.withValues(alpha: 0.18 + _animation.value * 0.14),
+                  AppColors.purple.withValues(alpha: 0.08 + _animation.value * 0.14),
                 ],
                 stops: const [0.0, 0.5, 1.0],
               ),
@@ -124,3 +124,4 @@ class SkeletonEventItem extends StatelessWidget {
     );
   }
 }
+

@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
@@ -50,7 +50,7 @@ class GlassCard extends StatelessWidget {
                   right: 20,
                   child: Container(
                     height: 1,
-                    color: Colors.white.withOpacity(0.10),
+                    color: Colors.white.withValues(alpha: 0.10),
                   ),
                 ),
                 Padding(padding: padding, child: child),
@@ -62,3 +62,4 @@ class GlassCard extends StatelessWidget {
     );
   }
 }
+
