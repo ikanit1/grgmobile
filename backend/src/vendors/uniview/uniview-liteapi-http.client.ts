@@ -443,18 +443,20 @@ export class UniviewLiteapiHttpClient {
 
   // ─── OSD Configuration ───
 
+  /** PUT OSD font/color/date style to device channel. */
   async setOsdContentStyle(
     device: Device,
     channelId: number,
-    style: { FontSize: number; FontColor: number; DateFormat: number },
+    style: { FontSize: number; Color: number; DateFormat: number },
   ): Promise<void> {
     await this.request(device, 'PUT', `/Channels/${channelId}/Media/OSDs/ContentStyle`, style);
   }
 
+  /** PUT OSD content slots to device channel. */
   async setOsdContents(
     device: Device,
     channelId: number,
-    contents: { Contents: Array<{ No: number; ContentType: number; Value?: string; Enabled: number }> },
+    contents: { Num: number; ContentList: Array<{ ID: number; Enabled: number; Num: number; ContentInfo: Array<{ ContentType: number; Value?: string }> }> },
   ): Promise<void> {
     await this.request(device, 'PUT', `/Channels/${channelId}/Media/OSDs/Contents`, contents);
   }
@@ -465,11 +467,12 @@ export class UniviewLiteapiHttpClient {
    */
   async applyDefaultOsd(device: Device, channelName: string): Promise<void> {
     const ch = device.defaultChannel ?? 1;
-    await this.setOsdContentStyle(device, ch, { FontSize: 2, FontColor: 16777215, DateFormat: 0 });
+    await this.setOsdContentStyle(device, ch, { FontSize: 2, Color: 16777215, DateFormat: 0 });
     await this.setOsdContents(device, ch, {
-      Contents: [
-        { No: 0, ContentType: 1, Value: channelName, Enabled: 1 },
-        { No: 1, ContentType: 2, Enabled: 1 },
+      Num: 2,
+      ContentList: [
+        { ID: 0, Enabled: 1, Num: 1, ContentInfo: [{ ContentType: 1, Value: channelName }] },
+        { ID: 1, Enabled: 1, Num: 1, ContentInfo: [{ ContentType: 2, Value: '' }] },
       ],
     });
   }

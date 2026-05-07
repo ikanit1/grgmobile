@@ -377,15 +377,16 @@ describe('UniviewLiteapiHttpClient', () => {
       expect(req.mock.calls[0][0]).toMatchObject({
         method: 'PUT',
         url: 'http://192.168.1.200:80/LAPI/V1.0/Channels/1/Media/OSDs/ContentStyle',
-        data: JSON.stringify({ FontSize: 2, FontColor: 16777215, DateFormat: 0 }),
+        data: JSON.stringify({ FontSize: 2, Color: 16777215, DateFormat: 0 }),
       });
       expect(req.mock.calls[1][0]).toMatchObject({
         method: 'PUT',
         url: 'http://192.168.1.200:80/LAPI/V1.0/Channels/1/Media/OSDs/Contents',
         data: JSON.stringify({
-          Contents: [
-            { No: 0, ContentType: 1, Value: 'Entrance 1', Enabled: 1 },
-            { No: 1, ContentType: 2, Enabled: 1 },
+          Num: 2,
+          ContentList: [
+            { ID: 0, Enabled: 1, Num: 1, ContentInfo: [{ ContentType: 1, Value: 'Entrance 1' }] },
+            { ID: 1, Enabled: 1, Num: 1, ContentInfo: [{ ContentType: 2, Value: '' }] },
           ],
         }),
       });
