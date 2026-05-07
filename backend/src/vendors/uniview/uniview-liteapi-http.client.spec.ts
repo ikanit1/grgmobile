@@ -465,4 +465,45 @@ describe('UniviewLiteapiHttpClient', () => {
       expect(body.Name).toBe('Relay 2');
     });
   });
+
+  // ---- setWdr ----
+
+  describe('setWdr', () => {
+    const currentExposure = { Mode: 1, WideDynamic: { Mode: 0, Level: 1, OpenSensitivity: 5 } };
+
+    it('GETs current exposure then PUTs with WDR enabled', async () => {
+      const req = jest.fn()
+        .mockReturnValueOnce(of(axiosResp({ Data: currentExposure })))
+        .mockReturnValueOnce(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.setWdr(device, 1, true, 5);
+      expect(req).toHaveBeenCalledTimes(2);
+      expect(req.mock.calls[0][0]).toMatchObject({ method: 'GET', url: expect.stringContaining('/Channels/1/Image/Advanced/Exposure') });
+      const putBody = JSON.parse(req.mock.calls[1][0].data);
+      expect(putBody.WideDynamic.Mode).toBe(1);
+      expect(putBody.WideDynamic.Level).toBe(5);
+      expect(putBody.WideDynamic.OpenSensitivity).toBe(5); // preserved from GET
+      expect(putBody.Mode).toBe(1); // preserved from GET
+    });
+
+    it('GETs current exposure then PUTs with WDR disabled', async () => {
+      const req = jest.fn()
+        .mockReturnValueOnce(of(axiosResp({ Data: { ...currentExposure, WideDynamic: { Mode: 1, Level: 7 } } })))
+        .mockReturnValueOnce(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.setWdr(device, 1, false, 5);
+      const putBody = JSON.parse(req.mock.calls[1][0].data);
+      expect(putBody.WideDynamic.Mode).toBe(0);
+    });
+
+    it('uses provided channelId in both GET and PUT URLs', async () => {
+      const req = jest.fn()
+        .mockReturnValueOnce(of(axiosResp({ Data: currentExposure })))
+        .mockReturnValueOnce(of(axiosResp({ ResponseCode: 0 })));
+      const client = new UniviewLiteapiHttpClient({ request: req } as any, makeCredSvc());
+      await client.setWdr(device, 2, true, 5);
+      expect(req.mock.calls[0][0].url).toContain('/Channels/2/Image/Advanced/Exposure');
+      expect(req.mock.calls[1][0].url).toContain('/Channels/2/Image/Advanced/Exposure');
+    });
+  });
 });

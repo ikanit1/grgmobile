@@ -508,5 +508,24 @@ export class UniviewLiteapiHttpClient {
       RelayMode: 1,
     });
   }
+
+  /**
+   * Enable or disable Wide Dynamic Range on a camera channel.
+   * GET-then-PUT: preserves all other exposure settings; only WideDynamic fields are changed.
+   * level: 1–9 (default 5 = balanced). Ignored when enabled is false (resets to 1).
+   */
+  async setWdr(device: Device, channelId: number, enabled: boolean, level = 5): Promise<void> {
+    const current = await this.request(device, 'GET', `/Channels/${channelId}/Image/Advanced/Exposure`);
+    const base = current?.Data ?? current ?? {};
+    const body = {
+      ...base,
+      WideDynamic: {
+        ...(base.WideDynamic ?? {}),
+        Mode: enabled ? 1 : 0,
+        Level: enabled ? level : 1,
+      },
+    };
+    await this.request(device, 'PUT', `/Channels/${channelId}/Image/Advanced/Exposure`, body);
+  }
 }
 

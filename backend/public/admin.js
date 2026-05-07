@@ -918,6 +918,7 @@
             (isNvr && !editDevice ? '<div class="drawer-hint"><div class="h-title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg> После добавления NVR</div><p>Нажмите «Синхр. камеры» — каналы NVR станут устройствами автоматически.</p></div>' : '') +
             (editDevice ? '<div style="margin-top:12px;border-top:1px solid var(--grg-border);padding-top:12px;"><div style="font-size:11px;font-weight:600;color:var(--grg-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">OSD / Подпись на видео</div><div class="drawer-field"><input id="dw-osd-name" value="' + esc(editDevice.name || '') + '" placeholder="Название для OSD" style="width:100%;"></div><button type="button" id="dw-apply-osd-btn" class="secondary" style="margin-top:6px;">Применить OSD</button></div>' : '') +
             (editDevice ? '<div style="margin-top:10px;"><div style="font-size:11px;font-weight:600;color:var(--grg-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Реле / Замок</div><div class="drawer-field-row"><div class="drawer-field"><label>Реле №</label><input id="dw-relay-id" type="number" value="1" min="1" max="8" style="width:60px;"></div><div class="drawer-field"><label>Время открытия (сек)</label><input id="dw-relay-dur" type="number" value="3" min="1" max="30" style="width:70px;"></div></div><button type="button" id="dw-apply-relay-btn" class="secondary" style="margin-top:6px;">Применить реле</button></div>' : '') +
+            (editDevice ? '<div style="margin-top:10px;"><div style="font-size:11px;font-weight:600;color:var(--grg-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Изображение</div><div class="drawer-field" style="flex-direction:row;align-items:center;gap:8px;"><input type="checkbox" id="dw-wdr-enabled" style="width:16px;height:16px;cursor:pointer;"><label for="dw-wdr-enabled" style="cursor:pointer;margin:0;">Улучшение картинки (WDR)</label></div><button type="button" id="dw-apply-wdr-btn" class="secondary" style="margin-top:6px;">Применить</button></div>' : '') +
             '<div id="drawerMsgEl"></div>';
           const osdBtn = document.getElementById('dw-apply-osd-btn');
           if (osdBtn) {
@@ -952,6 +953,23 @@
                 drawerMsg('Реле настроено', false);
               } catch (e) {
                 drawerMsg((e && e.message) || 'Ошибка настройки реле', true);
+              }
+            };
+          }
+          const wdrBtn = document.getElementById('dw-apply-wdr-btn');
+          if (wdrBtn) {
+            wdrBtn.onclick = async function() {
+              const wdrEnabled = document.getElementById('dw-wdr-enabled').checked;
+              try {
+                const r = await apiFetch('/devices/' + _drawerEditId + '/image-config', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ wdrEnabled }),
+                });
+                if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.message || r.statusText); }
+                drawerMsg('Настройки изображения применены', false);
+              } catch (e) {
+                drawerMsg((e && e.message) || 'Ошибка настройки изображения', true);
               }
             };
           }

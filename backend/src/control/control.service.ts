@@ -20,6 +20,7 @@ import { PtzPresetDto } from './dto/ptz-preset.dto';
 import { UserRole } from '../users/entities/user.entity';
 import { ApplyOsdDto } from './dto/apply-osd.dto';
 import { RelayConfigDto } from './dto/relay-config.dto';
+import { ImageConfigDto } from './dto/image-config.dto';
 
 @Injectable()
 export class ControlService {
@@ -373,6 +374,16 @@ export class ControlService {
     const device = await this.devicesService.findById(deviceId);
     await this.accessService.assertCanAccessDevice(user, device.buildingId);
     await this.univiewClient.setRelayDuration(device, dto.relayId ?? 1, dto.durationSec);
+  }
+
+  async setImageConfig(deviceId: number, dto: ImageConfigDto, user: RequestUser): Promise<void> {
+    if (user.role === UserRole.RESIDENT) {
+      throw new ForbiddenException('Недостаточно прав для настройки изображения');
+    }
+    const device = await this.devicesService.findById(deviceId);
+    await this.accessService.assertCanAccessDevice(user, device.buildingId);
+    const channelId = device.defaultChannel ?? 1;
+    await this.univiewClient.setWdr(device, channelId, dto.wdrEnabled, dto.wdrLevel ?? 5);
   }
 }
 
