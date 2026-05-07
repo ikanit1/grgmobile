@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { ControlService } from './control.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -12,6 +12,7 @@ import { RequestUser } from '../auth/request-user.interface';
 import { RecordingsQueryDto } from './dto/recordings-query.dto';
 import { PtzMoveDto } from './dto/ptz-move.dto';
 import { PtzPresetDto } from './dto/ptz-preset.dto';
+import { ApplyOsdDto } from './dto/apply-osd.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('devices')
@@ -167,6 +168,18 @@ export class ControlController {
     @Req() req: { user: RequestUser },
   ) {
     return this.controlService.gotoPreset(Number(id), dto, req.user);
+  }
+
+  // ─── Uniview OSD ───
+
+  @Post(':id/apply-osd')
+  @HttpCode(204)
+  async applyOsd(
+    @Param('id') id: string,
+    @Body() dto: ApplyOsdDto,
+    @Req() req: { user: RequestUser },
+  ): Promise<void> {
+    await this.controlService.applyOsd(Number(id), dto, req.user);
   }
 }
 
