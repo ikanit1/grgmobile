@@ -1,0 +1,147 @@
+name: Auto Audit & Telegram Report
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  audit:
+    name: Audit Changes & Notify Telegram
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Determine changed files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE=${{ github.event.pull_request.base.sha }}
+            HEAD=${{ github.event.pull_request.head.sha }}
+          else
+            BASE=${{ github.event.before }}
+            HEAD=${{ github.sha }}
+          fi
+
+          # Fallback: compare with previous commit if before is all zeros
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            BASE=$(git rev-parse HEAD~1 2>/dev/null || echo "")
+          fi
+
+          if [ -z "$BASE" ]; then
+            CHANGED=$(git diff-tree --no-commit-id -r --name-only "$HEAD")
+          else
+            CHANGED=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || git show --name-only --format="" "$HEAD")
+          fi
+
+          echo "$CHANGED" > /tmp/changed_files.txt
+          echo "Changed files:"
+          cat /tmp/changed_files.txt
+
+          # Detect categories
+          if grep -qE '^backend/' /tmp/changed_files.txt; then
+            echo "has_backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_backend=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if grep -qE '^(lib|test|pubspec)' /tmp/changed_files.txt; then
+            echo "has_flutter=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_flutter=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if grep -qE 'go2rtc|stream|rtc' /tmp/changed_files.txt; then
+            echo "has_streaming=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_streaming=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Backend audit ───────────────────────────────────────────────────────
+      - name: Install backend deps (for TS check)
+        if: steps.changed.outputs.has_backend == 'true'
+        working-directory: backend
+        run: npm ci --prefer-offline 2>&1 | tail -5
+
+      - name: Backend — TypeScript check
+        if: steps.changed.outputs.has_backend == 'true'
+        id: ts_check
+        working-directory: backend
+        run: |
+          npx tsc --noEmit 2>&1 | tee /tmp/ts_errors.txt || true
+          COUNT=$(wc -l < /tmp/ts_errors.txt | tr -d ' ')
+          echo "ts_errors=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "ts_output<<EOF" >> "$GITHUB_OUTPUT"
+          head -20 /tmp/ts_errors.txt >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Backend — Migration & schema audit
+        if: steps.changed.outputs.has_backend == 'true'
+        id: migration_check
+        run: |
+          node .github/scripts/audit-backend.js 2>&1 | tee /tmp/migration_report.txt || true
+          echo "migration_output<<EOF" >> "$GITHUB_OUTPUT"
+          cat /tmp/migration_report.txt >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      # ── Flutter audit ───────────────────────────────────────────────────────
+      - name: Setup Flutter
+        if: steps.changed.outputs.has_flutter == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter — Analyze
+        if: steps.changed.outputs.has_flutter == 'true'
+        id: flutter_analyze
+        run: |
+          flutter pub get --no-precompile 2>&1 | tail -3
+          flutter analyze --no-pub 2>&1 | tee /tmp/flutter_errors.txt || true
+          COUNT=$(grep -cE '(error|warning)' /tmp/flutter_errors.txt || echo "0")
+          echo "flutter_issues=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "flutter_output<<EOF" >> "$GITHUB_OUTPUT"
+          head -20 /tmp/flutter_errors.txt >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      # ── Streaming audit ─────────────────────────────────────────────────────
+      - name: Streaming endpoints — error-handling check
+        if: steps.changed.outputs.has_streaming == 'true'
+        id: streaming_check
+        run: |
+          node .github/scripts/audit-streaming.js 2>&1 | tee /tmp/streaming_report.txt || true
+          echo "streaming_output<<EOF" >> "$GITHUB_OUTPUT"
+          cat /tmp/streaming_report.txt >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      # ── Build full report & send to Telegram ───────────────────────────────
+      - name: Build audit report & send to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message || github.event.pull_request.title }}
+          ACTOR: ${{ github.actor }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HAS_BACKEND: ${{ steps.changed.outputs.has_backend }}
+          HAS_FLUTTER: ${{ steps.changed.outputs.has_flutter }}
+          HAS_STREAMING: ${{ steps.changed.outputs.has_streaming }}
+          TS_ERRORS: ${{ steps.ts_check.outputs.ts_errors }}
+          TS_OUTPUT: ${{ steps.ts_check.outputs.ts_output }}
+          MIGRATION_OUTPUT: ${{ steps.migration_check.outputs.migration_output }}
+          FLUTTER_ISSUES: ${{ steps.flutter_analyze.outputs.flutter_issues }}
+          FLUTTER_OUTPUT: ${{ steps.flutter_analyze.outputs.flutter_output }}
+          STREAMING_OUTPUT: ${{ steps.streaming_check.outputs.streaming_output }}
+        run: node .github/scripts/send-telegram-report.js
