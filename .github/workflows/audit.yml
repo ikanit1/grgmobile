@@ -1,0 +1,259 @@
+name: Auto Audit + Telegram Report
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Collect changed files
+        id: changes
+        run: |
+          BASE="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          fi
+          if git rev-parse "$BASE" >/dev/null 2>&1; then
+            FILES=$(git diff --name-only "$BASE" HEAD | tr '\n' '|')
+          else
+            FILES=$(git diff --name-only HEAD~1 HEAD | tr '\n' '|')
+          fi
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
+          echo "Changed files: $FILES"
+
+      # ── Backend audit ──────────────────────────────────────────────────────
+      - name: Backend – install deps
+        if: contains(steps.changes.outputs.files, 'backend/')
+        working-directory: backend
+        run: npm ci
+
+      - name: Backend – TypeScript check
+        id: ts_check
+        if: contains(steps.changes.outputs.files, 'backend/')
+        working-directory: backend
+        continue-on-error: true
+        run: npx tsc --noEmit 2>&1 | tee /tmp/ts_errors.txt; echo "exit=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Backend – run tests
+        id: backend_tests
+        if: contains(steps.changes.outputs.files, 'backend/')
+        working-directory: backend
+        continue-on-error: true
+        run: npm test -- --forceExit 2>&1 | tee /tmp/test_results.txt; echo "exit=$?" >> "$GITHUB_OUTPUT"
+        env:
+          DB_TYPE: sqlite
+          NODE_ENV: test
+          JWT_SECRET: ci-test-secret-key-not-for-production
+          CREDENTIALS_ENCRYPTION_KEY: 00000000000000000000000000000000
+          WEBHOOK_SECRET: ci-test-webhook-secret
+
+      - name: Backend – schema audit
+        id: schema_audit
+        if: contains(steps.changes.outputs.files, 'backend/')
+        run: |
+          ISSUES=""
+
+          # Check for entities not registered in app.module.ts
+          ENTITIES=$(grep -rh "@Entity(" backend/src --include="*.ts" -l)
+          for f in $ENTITIES; do
+            ENTITY_NAME=$(grep -oP "(?<=export class )\w+" "$f" | head -1)
+            if [ -n "$ENTITY_NAME" ]; then
+              if ! grep -q "$ENTITY_NAME" backend/src/app.module.ts; then
+                ISSUES="${ISSUES}\n⚠️ Entity $ENTITY_NAME ($(basename $f)) not in app.module.ts"
+              fi
+            fi
+          done
+
+          # Check synchronize in production warning
+          if grep -q "synchronize: process.env.NODE_ENV !== 'production'" backend/src/app.module.ts; then
+            echo "✅ synchronize guarded by NODE_ENV"
+          else
+            ISSUES="${ISSUES}\n🔴 CRITICAL: synchronize not guarded by NODE_ENV!"
+          fi
+
+          # Check for go2rtc error handling
+          GO2RTC_FILE="backend/src/vendors/go2rtc/go2rtc.client.ts"
+          if [ -f "$GO2RTC_FILE" ]; then
+            if grep -q "catch" "$GO2RTC_FILE"; then
+              echo "✅ go2rtc client has error handling"
+            else
+              ISSUES="${ISSUES}\n🔴 go2rtc client missing error handling"
+            fi
+            if ! grep -q "isConfigured" "$GO2RTC_FILE"; then
+              ISSUES="${ISSUES}\n⚠️ go2rtc client missing isConfigured guard"
+            fi
+          fi
+
+          # Check migrations for production
+          if [ -d backend/migrations ] && [ "$(ls -A backend/migrations 2>/dev/null)" ]; then
+            echo "✅ Migrations directory found"
+          else
+            ISSUES="${ISSUES}\n⚠️ No migrations directory — relying on synchronize only"
+          fi
+
+          echo "schema_issues<<EOF" >> "$GITHUB_OUTPUT"
+          echo -e "$ISSUES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      # ── Flutter audit ──────────────────────────────────────────────────────
+      - name: Flutter – pub get
+        if: contains(steps.changes.outputs.files, 'lib/') || contains(steps.changes.outputs.files, 'pubspec')
+        run: flutter pub get
+
+      - name: Flutter – analyze
+        id: flutter_analyze
+        if: contains(steps.changes.outputs.files, 'lib/') || contains(steps.changes.outputs.files, 'pubspec')
+        continue-on-error: true
+        run: flutter analyze --no-pub 2>&1 | tee /tmp/flutter_analyze.txt; echo "exit=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Flutter – tests
+        id: flutter_tests
+        if: contains(steps.changes.outputs.files, 'lib/') || contains(steps.changes.outputs.files, 'pubspec')
+        continue-on-error: true
+        run: flutter test 2>&1 | tee /tmp/flutter_tests.txt; echo "exit=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Flutter – structure audit
+        id: flutter_audit
+        if: contains(steps.changes.outputs.files, 'lib/')
+        run: |
+          ISSUES=""
+          REQUIRED_DIRS="lib/api lib/models lib/screens lib/services lib/widgets lib/theme"
+          for d in $REQUIRED_DIRS; do
+            if [ ! -d "$d" ]; then
+              ISSUES="${ISSUES}\n⚠️ Required Flutter dir missing: $d"
+            fi
+          done
+
+          # Check for hardcoded IPs in Flutter code
+          HARDCODED=$(grep -rn "192\.168\.\|10\.0\.\|172\.16\." lib/ --include="*.dart" \
+            | grep -v "//.*192\." | grep -v "example\|sample\|todo" | head -5)
+          if [ -n "$HARDCODED" ]; then
+            ISSUES="${ISSUES}\n⚠️ Possible hardcoded IPs in Flutter:\n$HARDCODED"
+          fi
+
+          echo "flutter_issues<<EOF" >> "$GITHUB_OUTPUT"
+          echo -e "$ISSUES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      # ── Build report and send to Telegram ─────────────────────────────────
+      - name: Build and send Telegram report
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CHANGED_FILES: ${{ steps.changes.outputs.files }}
+          TS_EXIT: ${{ steps.ts_check.outputs.exit }}
+          TEST_EXIT: ${{ steps.backend_tests.outputs.exit }}
+          SCHEMA_ISSUES: ${{ steps.schema_audit.outputs.schema_issues }}
+          FLUTTER_ANALYZE_EXIT: ${{ steps.flutter_analyze.outputs.exit }}
+          FLUTTER_TEST_EXIT: ${{ steps.flutter_tests.outputs.exit }}
+          FLUTTER_ISSUES: ${{ steps.flutter_audit.outputs.flutter_issues }}
+        run: |
+          python3 - <<'PYEOF'
+          import os, json, urllib.request, urllib.parse
+
+          token   = os.environ.get("TG_TOKEN", "")
+          chat_id = os.environ.get("TG_CHAT", "")
+          ev      = os.environ.get("GITHUB_EVENT_NAME", "push")
+          repo    = os.environ.get("GITHUB_REPOSITORY", "")
+          ref     = os.environ.get("GITHUB_REF_NAME", "")
+          actor   = os.environ.get("GITHUB_ACTOR", "")
+          sha     = os.environ.get("GITHUB_SHA", "")[:7]
+          run_url = f"https://github.com/{repo}/actions/runs/{os.environ.get('GITHUB_RUN_ID','')}"
+
+          changed = os.environ.get("CHANGED_FILES", "")
+          has_backend = "backend/" in changed
+          has_flutter = "lib/" in changed or "pubspec" in changed
+
+          emoji_ev = "🔀" if ev == "pull_request" else "⬆️"
+          lines = [
+            f"{emoji_ev} *GRG Mobile — Audit Report*",
+            f"Repo: `{repo}` | Ref: `{ref}` | SHA: `{sha}`",
+            f"Event: `{ev}` | Actor: `{actor}`",
+            "",
+          ]
+
+          # Backend section
+          if has_backend:
+            lines.append("*── Backend (NestJS) ──*")
+            ts_ok    = os.environ.get("TS_EXIT","") in ("0","")
+            test_ok  = os.environ.get("TEST_EXIT","") in ("0","")
+            lines.append(f"  TypeScript: {'✅ OK' if ts_ok else '🔴 ERRORS'}")
+            lines.append(f"  Tests:      {'✅ OK' if test_ok else '🔴 FAILED'}")
+            schema = os.environ.get("SCHEMA_ISSUES","").strip()
+            if schema:
+              lines.append("  Schema issues:")
+              for l in schema.split("\n"):
+                if l.strip():
+                  lines.append(f"    {l.strip()}")
+            else:
+              lines.append("  Schema: ✅ No issues")
+            lines.append("")
+
+          # Flutter section
+          if has_flutter:
+            lines.append("*── Flutter ──*")
+            fl_ok   = os.environ.get("FLUTTER_ANALYZE_EXIT","") in ("0","")
+            ft_ok   = os.environ.get("FLUTTER_TEST_EXIT","") in ("0","")
+            lines.append(f"  Analyze: {'✅ OK' if fl_ok else '⚠️ WARNINGS'}")
+            lines.append(f"  Tests:   {'✅ OK' if ft_ok else '🔴 FAILED'}")
+            fi = os.environ.get("FLUTTER_ISSUES","").strip()
+            if fi:
+              lines.append("  Structure issues:")
+              for l in fi.split("\n"):
+                if l.strip():
+                  lines.append(f"    {l.strip()}")
+            else:
+              lines.append("  Structure: ✅ OK")
+            lines.append("")
+
+          if not has_backend and not has_flutter:
+            lines.append("ℹ️ No backend or Flutter files changed in this event.")
+            lines.append("")
+
+          lines.append(f"[View run]({run_url})")
+
+          text = "\n".join(lines)
+
+          if not token or not chat_id:
+            print("No TG credentials — skipping send")
+            print(text)
+          else:
+            url  = f"https://api.telegram.org/bot{token}/sendMessage"
+            data = json.dumps({
+              "chat_id": chat_id,
+              "text": text,
+              "parse_mode": "Markdown",
+              "disable_web_page_preview": True,
+            }).encode()
+            req  = urllib.request.Request(url, data=data,
+                      headers={"Content-Type": "application/json"})
+            try:
+              resp = urllib.request.urlopen(req, timeout=15)
+              print("Telegram: sent OK", resp.status)
+            except Exception as e:
+              print("Telegram send failed:", e)
+          PYEOF
