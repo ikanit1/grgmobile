@@ -1,0 +1,43 @@
+name: Автоматический аудит репозитория
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  TELEGRAM_BOT_TOKEN: "8578442151:AAGyycIa1TyBCrMp78QLNS2GCscB8Kph6Rc"
+  TELEGRAM_CHAT_ID: "947126451"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    name: Аудит изменений
+
+    steps:
+      - name: Checkout репозитория
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Определить изменённые файлы
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}" --depth=1
+            FILES=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          else
+            FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null \
+              || git show --name-only --format="" HEAD)
+          fi
+          {
+            printf 'CHANGED_FILES<<AUDIT_EOF\n'
+            printf '%s\n' "$FILES"
+            printf 'AUDIT_EOF\n'
+          } >> "$GITHUB_ENV"
+
+      - name: Провести аудит и отправить отчёт в Telegram
+        run: python3 .github/scripts/audit.py
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title || '' }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
