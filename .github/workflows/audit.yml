@@ -1,0 +1,294 @@
+name: Automated Code Audit & Telegram Report
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed files
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+            CHANGED=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || echo "")
+          else
+            if git rev-parse HEAD~1 >/dev/null 2>&1; then
+              CHANGED=$(git diff --name-only HEAD~1 HEAD)
+            else
+              CHANGED=$(git show --name-only --format="" HEAD)
+            fi
+          fi
+
+          echo "files<<ENDOFFILES" >> "$GITHUB_OUTPUT"
+          echo "$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "ENDOFFILES" >> "$GITHUB_OUTPUT"
+
+          TOTAL=$(echo "$CHANGED" | grep -c "." 2>/dev/null || echo "0")
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+
+          echo "$CHANGED" | grep -qE "^backend/" && echo "backend=true" >> "$GITHUB_OUTPUT" || echo "backend=false" >> "$GITHUB_OUTPUT"
+          echo "$CHANGED" | grep -qE "^lib/|\.dart$|pubspec\.yaml|pubspec\.lock" && echo "flutter=true" >> "$GITHUB_OUTPUT" || echo "flutter=false" >> "$GITHUB_OUTPUT"
+          echo "$CHANGED" | grep -qiE "go2rtc|stream|rtsp|hls|webrtc" && echo "streaming=true" >> "$GITHUB_OUTPUT" || echo "streaming=false" >> "$GITHUB_OUTPUT"
+
+      - name: Audit backend (NestJS)
+        id: backend
+        if: steps.changes.outputs.backend == 'true'
+        run: |
+          ISSUES=""
+          SUMMARY=""
+          FILES="${{ steps.changes.outputs.files }}"
+
+          MIGRATION_FILES=$(echo "$FILES" | grep -E "migration|\.sql$" || true)
+          ENTITY_FILES=$(echo "$FILES" | grep -E "\.entity\.ts$" || true)
+          MODULE_FILES=$(echo "$FILES" | grep -E "\.module\.ts$" || true)
+          SERVICE_FILES=$(echo "$FILES" | grep -E "\.service\.ts$" || true)
+          CONTROLLER_FILES=$(echo "$FILES" | grep -E "\.controller\.ts$" || true)
+
+          [ -n "$MIGRATION_FILES" ] && SUMMARY="$SUMMARY\n  📊 Миграции БД: изменены"
+          [ -n "$ENTITY_FILES" ] && SUMMARY="$SUMMARY\n  🗂️ Сущности TypeORM: изменены"
+          [ -n "$MODULE_FILES" ] && SUMMARY="$SUMMARY\n  📦 Модули NestJS: изменены"
+          [ -n "$SERVICE_FILES" ] && SUMMARY="$SUMMARY\n  ⚙️ Сервисы: изменены"
+          [ -n "$CONTROLLER_FILES" ] && SUMMARY="$SUMMARY\n  🌐 Контроллеры/эндпоинты: изменены"
+
+          for f in $MIGRATION_FILES; do
+            if [ -f "$f" ]; then
+              if ! grep -qiE "down\(\)|rollback|revert|drop" "$f" 2>/dev/null; then
+                ISSUES="$ISSUES\n⚠️ Миграция без метода отката: \`$f\`"
+              fi
+            fi
+          done
+
+          for f in $ENTITY_FILES; do
+            if [ -f "$f" ]; then
+              if ! grep -qE "@Entity|@Column|@PrimaryGeneratedColumn" "$f" 2>/dev/null; then
+                ISSUES="$ISSUES\n❌ Entity без декораторов TypeORM: \`$f\`"
+              fi
+              if grep -qE "password|secret|token|key" "$f" 2>/dev/null && ! grep -qE "exclude\(\)|@Exclude|select: false" "$f" 2>/dev/null; then
+                ISSUES="$ISSUES\n⚠️ Возможна утечка чувствительных полей в \`$f\` (нет @Exclude)"
+              fi
+            fi
+          done
+
+          for f in $SERVICE_FILES; do
+            if [ -f "$f" ]; then
+              if grep -qiE "password|credentials" "$f" 2>/dev/null && ! grep -qE "CredentialsService|decrypt|encrypt" "$f" 2>/dev/null; then
+                ISSUES="$ISSUES\n⚠️ Возможно хранение credentials без шифрования в \`$f\`"
+              fi
+            fi
+          done
+
+          for f in $CONTROLLER_FILES; do
+            if [ -f "$f" ]; then
+              if ! grep -qE "@UseGuards|JwtAuthGuard|RolesGuard" "$f" 2>/dev/null; then
+                ISSUES="$ISSUES\n⚠️ Контроллер без Guard (нет аутентификации?): \`$f\`"
+              fi
+            fi
+          done
+
+          printf '%b' "$SUMMARY" > /tmp/backend_summary.txt
+          printf '%b' "$ISSUES" > /tmp/backend_issues.txt
+
+          {
+            echo "summary<<ENDSUMMARY"
+            cat /tmp/backend_summary.txt
+            echo "ENDSUMMARY"
+            echo "issues<<ENDISSUES"
+            cat /tmp/backend_issues.txt
+            echo "ENDISSUES"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Audit Flutter UI
+        id: flutter
+        if: steps.changes.outputs.flutter == 'true'
+        run: |
+          ISSUES=""
+          SUMMARY=""
+          FILES="${{ steps.changes.outputs.files }}"
+
+          DART_FILES=$(echo "$FILES" | grep -E "\.dart$" || true)
+          DART_COUNT=$(echo "$DART_FILES" | grep -c "." 2>/dev/null || echo "0")
+
+          SCREENS=$(echo "$DART_FILES" | grep -E "^lib/screens/" || true)
+          WIDGETS=$(echo "$DART_FILES" | grep -E "^lib/widgets/" || true)
+          SERVICES=$(echo "$DART_FILES" | grep -E "^lib/services/" || true)
+          MODELS=$(echo "$DART_FILES" | grep -E "^lib/models/" || true)
+
+          [ -n "$SCREENS" ] && SUMMARY="$SUMMARY\n  📺 Экраны: изменены"
+          [ -n "$WIDGETS" ] && SUMMARY="$SUMMARY\n  🧩 Виджеты: изменены"
+          [ -n "$SERVICES" ] && SUMMARY="$SUMMARY\n  ⚙️ Сервисы Flutter: изменены"
+          [ -n "$MODELS" ] && SUMMARY="$SUMMARY\n  📐 Модели данных: изменены"
+
+          echo "$DART_FILES" | grep -qE "^lib/" || {
+            ORPHAN=$(echo "$DART_FILES" | grep -vE "^lib/|^test/" || true)
+            [ -n "$ORPHAN" ] && ISSUES="$ISSUES\n❌ Dart-файлы вне \`lib/\` или \`test/\`: $ORPHAN"
+          }
+
+          for f in $DART_FILES; do
+            if [ -f "$f" ]; then
+              TODOS=$(grep -cE "TODO|FIXME|HACK" "$f" 2>/dev/null || echo "0")
+              [ "$TODOS" -gt 0 ] && ISSUES="$ISSUES\n⚠️ $TODOS TODO/FIXME в \`$f\`"
+
+              if grep -qE "BackendClient|http\.get|http\.post" "$f" 2>/dev/null; then
+                if ! grep -qE "try\s*\{|\.catchError|onError|catch\s*\(" "$f" 2>/dev/null; then
+                  ISSUES="$ISSUES\n⚠️ HTTP-вызов без обработки ошибок в \`$f\`"
+                fi
+              fi
+            fi
+          done
+
+          printf "Dart-файлов изменено: %s" "$DART_COUNT" > /tmp/flutter_summary.txt
+          printf '%b' "$SUMMARY" >> /tmp/flutter_summary.txt
+          printf '%b' "$ISSUES" > /tmp/flutter_issues.txt
+
+          {
+            echo "summary<<ENDSUMMARY"
+            cat /tmp/flutter_summary.txt
+            echo "ENDSUMMARY"
+            echo "issues<<ENDISSUES"
+            cat /tmp/flutter_issues.txt
+            echo "ENDISSUES"
+            echo "dart_count=$DART_COUNT"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Audit streaming endpoints
+        id: streaming
+        if: steps.changes.outputs.streaming == 'true'
+        run: |
+          ISSUES=""
+          FILES="${{ steps.changes.outputs.files }}"
+
+          STREAM_FILES=$(echo "$FILES" | grep -iE "go2rtc|stream|rtsp|hls|webrtc" || true)
+
+          for f in $STREAM_FILES; do
+            if [ -f "$f" ]; then
+              if echo "$f" | grep -qE "\.ts$"; then
+                if ! grep -qE "try\s*\{|catch|\.catch|HttpException|BadGatewayException|handleError" "$f" 2>/dev/null; then
+                  ISSUES="$ISSUES\n❌ Нет обработки ошибок в TS стриминг-файле: \`$f\`"
+                fi
+                if ! grep -qE "timeout|setTimeout|AbortSignal" "$f" 2>/dev/null; then
+                  ISSUES="$ISSUES\n⚠️ Нет таймаута для стриминг-соединения: \`$f\`"
+                fi
+              fi
+              if echo "$f" | grep -qE "\.dart$"; then
+                if ! grep -qE "try\s*\{|catch|\.catchError|onError" "$f" 2>/dev/null; then
+                  ISSUES="$ISSUES\n❌ Нет обработки ошибок в Flutter стриминге: \`$f\`"
+                fi
+              fi
+            fi
+          done
+
+          printf '%b' "$ISSUES" > /tmp/streaming_issues.txt
+          {
+            echo "issues<<ENDISSUES"
+            cat /tmp/streaming_issues.txt
+            echo "ENDISSUES"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send Telegram report
+        run: |
+          EVENT="${{ github.event_name }}"
+          REPO="${{ github.repository }}"
+          BRANCH="${{ github.ref_name }}"
+          COMMIT="${{ github.sha }}"
+          SHORT="${COMMIT:0:7}"
+          ACTOR="${{ github.actor }}"
+          TIMESTAMP=$(date '+%Y-%m-%d %H:%M UTC')
+          TOTAL="${{ steps.changes.outputs.total }}"
+          BACKEND="${{ steps.changes.outputs.backend }}"
+          FLUTTER="${{ steps.changes.outputs.flutter }}"
+          STREAMING="${{ steps.changes.outputs.streaming }}"
+
+          if [ "$EVENT" == "pull_request" ]; then
+            PR_NUM="${{ github.event.pull_request.number }}"
+            PR_TITLE="${{ github.event.pull_request.title }}"
+            EVENT_LINE="🔀 PR #${PR_NUM}: ${PR_TITLE}"
+          else
+            EVENT_LINE="📦 Push → ${BRANCH}"
+          fi
+
+          REPORT="🔍 *АУДИТ РЕПОЗИТОРИЯ GRG Mobile*
+
+📋 ${EVENT_LINE}
+🏠 \`${REPO}\`
+👤 Автор: ${ACTOR}
+🔑 Коммит: \`${SHORT}\`
+🕐 ${TIMESTAMP}
+📁 Файлов изменено: ${TOTAL}
+
+━━━━━━━━━━━━━━━━━━━━"
+
+          if [ "$BACKEND" == "true" ]; then
+            B_SUMMARY="${{ steps.backend.outputs.summary }}"
+            B_ISSUES="${{ steps.backend.outputs.issues }}"
+            REPORT="${REPORT}
+
+🖥 *BACKEND (NestJS)*"
+            [ -n "$B_SUMMARY" ] && REPORT="${REPORT}
+${B_SUMMARY}"
+            if [ -n "$B_ISSUES" ] && [ "$B_ISSUES" != "" ]; then
+              REPORT="${REPORT}
+${B_ISSUES}"
+            else
+              REPORT="${REPORT}
+  ✅ Критических проблем не обнаружено"
+            fi
+          fi
+
+          if [ "$FLUTTER" == "true" ]; then
+            F_SUMMARY="${{ steps.flutter.outputs.summary }}"
+            F_ISSUES="${{ steps.flutter.outputs.issues }}"
+            REPORT="${REPORT}
+
+📱 *FLUTTER*
+  ${F_SUMMARY}"
+            if [ -n "$F_ISSUES" ] && [ "$F_ISSUES" != "" ]; then
+              REPORT="${REPORT}
+${F_ISSUES}"
+            else
+              REPORT="${REPORT}
+  ✅ UI-компоненты соответствуют структуре"
+            fi
+          fi
+
+          if [ "$STREAMING" == "true" ]; then
+            S_ISSUES="${{ steps.streaming.outputs.issues }}"
+            REPORT="${REPORT}
+
+🎥 *ВИДЕОСТРИМИНГ (go2rtc)*"
+            if [ -n "$S_ISSUES" ] && [ "$S_ISSUES" != "" ]; then
+              REPORT="${REPORT}
+${S_ISSUES}"
+            else
+              REPORT="${REPORT}
+  ✅ Обработка ошибок и таймауты присутствуют"
+            fi
+          fi
+
+          REPORT="${REPORT}
+
+━━━━━━━━━━━━━━━━━━━━
+🤖 _Автоматический аудит · GRG Mobile CI_"
+
+          HTTP_CODE=$(curl -s -o /tmp/tg_resp.json -w "%{http_code}" \
+            -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{\"chat_id\":\"${{ secrets.TELEGRAM_CHAT_ID }}\",\"text\":$(echo "$REPORT" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),\"parse_mode\":\"Markdown\"}")
+
+          cat /tmp/tg_resp.json
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Telegram API returned HTTP $HTTP_CODE"
+            exit 1
+          fi
