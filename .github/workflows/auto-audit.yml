@@ -1,0 +1,81 @@
+name: Auto Audit + Telegram
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  audit:
+    name: Audit & Notify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect changed files
+        id: files
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git diff --name-only \
+              origin/${{ github.base_ref }}...HEAD \
+              > changed_files.txt 2>/dev/null \
+              || git diff --name-only HEAD~1 HEAD > changed_files.txt
+          else
+            git diff --name-only HEAD~1 HEAD > changed_files.txt 2>/dev/null \
+              || git show --name-only --format="" HEAD > changed_files.txt
+          fi
+          echo "=== Changed files ==="
+          cat changed_files.txt
+          echo "COUNT=$(wc -l < changed_files.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Run audit
+        env:
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          python3 .github/scripts/audit.py
+          echo "=== Audit report ==="
+          cat audit_report.txt
+
+      - name: Send report to Telegram
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram secrets not configured, skipping notification"
+            exit 0
+          fi
+
+          REPORT=$(cat audit_report.txt 2>/dev/null || echo "Аудит не дал результатов")
+
+          # Truncate if too long for Telegram (4096 char limit)
+          if [ ${#REPORT} -gt 4000 ]; then
+            REPORT="${REPORT:0:3900}"$'\n\n…(полный отчёт — в GitHub Actions)'
+          fi
+
+          PAYLOAD=$(python3 -c "
+          import sys, json
+          text = sys.stdin.read()
+          print(json.dumps({'chat_id': '$TELEGRAM_CHAT_ID', 'text': text, 'parse_mode': 'HTML', 'disable_web_page_preview': True}))
+          " <<< "$REPORT")
+
+          HTTP_CODE=$(curl -s -o /tmp/tg_response.json -w "%{http_code}" \
+            -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          echo "Telegram API response code: $HTTP_CODE"
+          cat /tmp/tg_response.json
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Failed to send Telegram message"
+            exit 1
+          fi
